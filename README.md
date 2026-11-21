@@ -38,9 +38,9 @@ The battle is **event-driven**: between events (boss death, boss attack, trainin
 - **Questions** are generated from verified templates (six skills, three difficulties), deterministic per student/week/index so refreshing never changes the question. Bonus Questions come from a small fixed bank (three per week).
 - **Daily Review unlocks** by weekday. Unfinished questions carry over through the week.
 
-## Balance observation (provisional numbers)
+## Balance validation
 
-With the design's numbers, a 25-student castle has 10,000 HP but Boss 1 deals 110/hour, which is 18,480 over a full week, and later bosses hit harder. Running the simulated classroom for 12 weeks gave 2 bosses per week and a castle ending the week at 0-7% HP, usually with a breach. Castle defense is therefore the binding constraint, not boss HP. This needs a decision in Milestone 0 balance testing; the prototype has not changed any values.
+A simulator (`npm run balance -- study`) runs the real rules engine for 10/25/40-student classes at low to high donation rates. With the design's provisional numbers, classes win 1-2 bosses a week, but the castle usually ends the week near 0-12% and mixed-donation classes breach in about 60% of weeks. Most breaches begin on Sunday from a third boss that spawns about 27 hours before week end and cannot be beaten; they cost no victories. No gameplay defaults were changed. See [`docs/BALANCE_REPORT.md`](docs/BALANCE_REPORT.md) for the findings and a recommended two-value change for the owner to approve.
 
 ## Not built yet
 

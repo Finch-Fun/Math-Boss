@@ -1,5 +1,5 @@
 // Shared state helpers used by the engine, actions and simulated classmates. All functions mutate the state they are given.
-import { BOSS_ATTACK_INTERVAL, BREACH_RECOVERY_FRACTION, QUESTION_REPAIR_FRACTION } from './constants';
+import { BOSS_ATTACK_INTERVAL, TUNING } from './constants';
 import { weekdayIndex } from './time';
 import { dps } from './upgrades';
 import type { GameState, Student } from './types';
@@ -15,8 +15,8 @@ export function getStudent(s: GameState, id: string): Student {
   return st;
 }
 
-export const castleMaxHp = (s: GameState): number => Math.round(s.battle.baseCastleMaxHp * (1 + 0.1 * s.projects.walls.level));
-export const armorPct = (s: GameState): number => Math.min(0.5, 0.05 * s.projects.plating.level);
+export const castleMaxHp = (s: GameState): number => Math.round(s.battle.baseCastleMaxHp * (1 + TUNING.wallsPerLevel * s.projects.walls.level));
+export const armorPct = (s: GameState): number => Math.min(0.5, TUNING.armorPerLevel * s.projects.plating.level);
 export const dpsBonus = (s: GameState): number => Math.min(0.25, 0.05 * s.projects.banner.level);
 
 /** Inactive students contribute nothing. */
@@ -61,14 +61,14 @@ export function resumeCombat(s: GameState): void {
 
 export function checkBreachRecovery(s: GameState): void {
   const b = s.battle;
-  if (b.phase === 'breach' && b.castleHp >= BREACH_RECOVERY_FRACTION * castleMaxHp(s) - 1e-6) resumeCombat(s);
+  if (b.phase === 'breach' && b.castleHp >= TUNING.breachRecoveryFraction * castleMaxHp(s) - 1e-6) resumeCombat(s);
 }
 
 /** Emergency reconstruction from a correct Daily Review answer. Never awards coins. */
 export function emergencyRepairFromQuestion(s: GameState): void {
   if (s.battle.phase !== 'breach') return;
   const max = castleMaxHp(s);
-  const add = QUESTION_REPAIR_FRACTION * max;
+  const add = TUNING.questionRepairFraction * max;
   s.battle.castleHp = Math.min(max, s.battle.castleHp + add);
   s.stats.emergencyRepairHp += add;
   checkBreachRecovery(s);
