@@ -1,13 +1,6 @@
 // Event-driven combat engine. Between events the class DPS is constant, so damage is computed exactly from
 // elapsed time (no per-attack writes) and the same code handles live play, offline progress and dev time-skips.
-import {
-  AUTO_RECONSTRUCTION_PER_HOUR,
-  BOSS_ATTACK_INTERVAL,
-  BREACH_RECOVERY_FRACTION,
-  CASTLE_HP_PER_STUDENT,
-  NO_SPAWN_WINDOW,
-  TRAINING_DURATION,
-} from './constants';
+import { BOSS_ATTACK_INTERVAL, HOUR, TRAINING_DURATION, TUNING } from './constants';
 import { spawnBoss } from './boss';
 import { nextBotSession, runBotSession } from './bots';
 import {
@@ -66,7 +59,7 @@ export function startNewWeek(s: GameState, at: number, initial = false): void {
   b.weekIndex = initial ? 1 : b.weekIndex + 1;
   b.weekStart = at;
   b.weekEnd = weekEndOf(at);
-  b.baseCastleMaxHp = CASTLE_HP_PER_STUDENT * n;
+  b.baseCastleMaxHp = TUNING.castleHpPerStudent * n;
   b.castleHp = castleMaxHp(s);
   b.bossesDefeated = 0;
   b.phase = 'combat';
@@ -92,8 +85,8 @@ function nextEvent(s: GameState, target: number): GameEvent | null {
   }
   if (b.phase === 'breach') {
     const max = castleMaxHp(s);
-    const need = BREACH_RECOVERY_FRACTION * max - b.castleHp;
-    const time = need <= 0 ? s.now : s.now + Math.ceil((need / (AUTO_RECONSTRUCTION_PER_HOUR * max)) * 3_600_000);
+    const need = TUNING.breachRecoveryFraction * max - b.castleHp;
+    const time = need <= 0 ? s.now : s.now + Math.ceil((need / (TUNING.autoReconstructionPerHour * max)) * 3_600_000);
     candidates.push({ time, kind: 'breach_recovered', priority: 4 });
   }
   candidates.push({ time: addDays(dayStart(s.now), 1), kind: 'day_start', priority: 5 });
@@ -123,7 +116,7 @@ function integrate(s: GameState, to: number): void {
     }
   } else if (b.phase === 'breach') {
     const max = castleMaxHp(s);
-    b.castleHp = Math.min(max, b.castleHp + AUTO_RECONSTRUCTION_PER_HOUR * max * (dt / 3_600_000));
+    b.castleHp = Math.min(max, b.castleHp + TUNING.autoReconstructionPerHour * max * (dt / 3_600_000));
   }
   s.now = to;
 }
@@ -159,7 +152,7 @@ function handle(s: GameState, ev: GameEvent): void {
     }
     case 'training_end': {
       b.trainingEndsAt = null;
-      if (b.weekEnd - s.now > NO_SPAWN_WINDOW) {
+      if (b.weekEnd - s.now > TUNING.noSpawnWindowHours * HOUR) {
         b.boss = spawnBoss(s, b.bossesDefeated + 1);
         b.phase = 'combat';
         b.nextAttackAt = s.now + BOSS_ATTACK_INTERVAL;

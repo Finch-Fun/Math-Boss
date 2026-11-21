@@ -1,14 +1,11 @@
 import {
-  BOSS_ATTACK_GROWTH,
-  BOSS_ATTACK_PER_HOUR_REF,
   BOSS_DIFFICULTY_MOD,
-  BOSS_HP_GROWTH,
   BOSS_NAMES,
-  BOSS_TARGET_COMBAT_SECONDS,
   DEFAULT_EXPECTED_PARTICIPATION,
   EXPECTED_COINS_PER_QUESTION,
   PERSONAL_SPEND_SHARE,
   REFERENCE_CLASS_SIZE,
+  TUNING,
 } from './constants';
 import { bestUpgrade, dps, upgradeCost } from './upgrades';
 import type { Boss, GameState, Upgrades } from './types';
@@ -59,14 +56,14 @@ export function expectedClassDps(s: GameState): number {
 /** Boss HP = Expected Class DPS x Target Combat Seconds x Difficulty Modifier x stage multiplier. Fixed at spawn. */
 export function bossMaxHp(s: GameState, number: number): number {
   return Math.round(
-    expectedClassDps(s) * BOSS_TARGET_COMBAT_SECONDS * BOSS_DIFFICULTY_MOD[s.settings.bossDifficulty] * BOSS_HP_GROWTH ** (number - 1),
+    expectedClassDps(s) * (TUNING.bossTargetHours * 3600) * BOSS_DIFFICULTY_MOD[s.settings.bossDifficulty] * TUNING.bossHpGrowth ** (number - 1),
   );
 }
 
 /** 110 HP/hour for a 25-student class, scaled linearly by class size (assumption), x1.2 per stage. */
 export function bossAttackPerHour(studentCount: number, number: number): number {
-  const base = (BOSS_ATTACK_PER_HOUR_REF * studentCount) / REFERENCE_CLASS_SIZE;
-  return Math.round(base * BOSS_ATTACK_GROWTH ** (number - 1) * 100) / 100;
+  const base = (TUNING.bossAttackPerHourRef * studentCount) / REFERENCE_CLASS_SIZE;
+  return Math.round(base * TUNING.bossAttackGrowth ** (number - 1) * 100) / 100;
 }
 
 export function spawnBoss(s: GameState, number: number): Boss {

@@ -1,4 +1,4 @@
-import { CASTLE_HP_PER_STUDENT, STATE_VERSION } from './constants';
+import { STATE_VERSION, TUNING } from './constants';
 import { startNewWeek, freshStats } from './engine';
 import { freshProjects } from './projects';
 import { ALL_SKILLS } from './questions';
@@ -63,8 +63,8 @@ export function createGame(opts: { now: number; studentCount?: number; botsEnabl
       phase: 'combat',
       boss: null,
       bossesDefeated: 0,
-      castleHp: CASTLE_HP_PER_STUDENT * count,
-      baseCastleMaxHp: CASTLE_HP_PER_STUDENT * count,
+      castleHp: TUNING.castleHpPerStudent * count,
+      baseCastleMaxHp: TUNING.castleHpPerStudent * count,
       nextAttackAt: null,
       trainingEndsAt: null,
       weekIndex: 1,

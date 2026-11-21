@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { submitDailyAnswer } from './actions';
 import { bossAttackPerHour, bossMaxHp } from './boss';
-import { HOUR } from './constants';
+import { DEFAULT_TUNING, HOUR, resetTuning, setTuning, TUNING } from './constants';
 import { castleMaxHp, classDps, getStudent } from './core';
 import { devActivateAll, devGrantCoins } from './dev';
 import { advance } from './engine';
@@ -235,4 +235,51 @@ test('simulated classmates are deterministic and keep the game state valid over 
   const max = castleMaxHp(a);
   assert.ok(a.battle.castleHp >= 0 && a.battle.castleHp <= max + 1e-6);
   assert.ok(a.battle.boss!.hp >= 0);
+});
+
+test('provisional combat values still match docs/GAME_DESIGN.md (changing them is a design decision)', () => {
+  assert.deepEqual(
+    { ...DEFAULT_TUNING },
+    {
+      castleHpPerStudent: 400,
+      bossAttackPerHourRef: 110,
+      bossAttackGrowth: 1.2,
+      bossHpGrowth: 1.5,
+      bossTargetHours: 30,
+      noSpawnWindowHours: 2,
+      breachRecoveryFraction: 0.25,
+      autoReconstructionPerHour: 0.005,
+      questionRepairFraction: 0.001,
+      wallsPerLevel: 0.1,
+      armorPerLevel: 0.05,
+      repairsFraction: 0.2,
+      projectRepeatGrowth: [3, 2],
+    },
+  );
+  assert.deepEqual({ ...TUNING }, { ...DEFAULT_TUNING }); // nothing left overridden by another test
+});
+
+test('the spawn cutoff is tunable: a longer cutoff means no new boss late in the week', () => {
+  const setup = () => {
+    const s = makeGame();
+    devActivateAll(s);
+    s.battle.phase = 'training';
+    s.battle.nextAttackAt = null;
+    s.battle.bossesDefeated = 2;
+    s.battle.boss!.hp = 0;
+    s.battle.trainingEndsAt = s.battle.weekEnd - hours(20); // training ends with 20 hours left
+    return s;
+  };
+  const normal = setup();
+  advance(normal, normal.battle.weekEnd - hours(19));
+  assert.equal(normal.battle.phase, 'combat'); // default: only the final 2 hours are excluded
+
+  setTuning({ noSpawnWindowHours: 30 });
+  try {
+    const strict = setup();
+    advance(strict, strict.battle.weekEnd - hours(19));
+    assert.equal(strict.battle.phase, 'idle');
+  } finally {
+    resetTuning();
+  }
 });
