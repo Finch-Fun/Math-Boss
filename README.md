@@ -44,7 +44,7 @@ A simulator (`npm run balance -- study`) runs the real rules engine for 10/25/40
 
 ## Firebase classrooms (Milestone 1)
 
-With Firebase settings in `.env.local`, the app offers teacher sign-in, classroom creation, join codes, and teacher-approved student membership. Without them it runs the local demo exactly as before. Gameplay inside a Firebase classroom is still the local simulation and is labelled "not shared". Setup, security model, and Spark-plan notes: [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+With Firebase settings in `.env.local`, the app offers teacher sign-in, classroom creation, join codes, and teacher-approved student membership. Without them it runs the local demo exactly as before. Gameplay inside a Firebase classroom is still the local simulation and is labelled "not shared". Students see only the student gameplay view; teachers get classroom management plus a simulated preview; developer simulation tools exist only in development builds (see the roles section of the setup guide). Setup, security model, and Spark-plan notes: [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
 
 ## Not built yet
 

@@ -1,14 +1,16 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { Suspense, useMemo, useState, type ComponentType, type ReactNode } from 'react';
+import { allowedViews, effectiveView, type Surface, type WorkspaceView } from '../cloud/access';
 import type { Settings } from '../game/types';
 import { LocalStorageRepository } from '../storage/repository';
-import DevPanel from './DevPanel';
 import StudentView from './StudentView';
 import TeacherView, { BattleReportBody } from './TeacherView';
-import { useGame } from './useGame';
-
-type View = 'student' | 'teacher' | 'dev';
+import { useGame, type Game } from './useGame';
 
 interface WorkspaceProps {
+  /** Decides which views exist here (see src/cloud/access.ts). Students only ever get the Student view. */
+  surface: Surface;
+  /** Developer tools, supplied only by the local demo and only when the build includes them (see devTools.tsx). */
+  devTools?: ComponentType<{ game: Game }> | null;
   /** localStorage key for this local game. Demo mode and each Firebase classroom's practice game use different keys. */
   storageKey: string;
   /** Seeds a brand-new local game with a classroom's settings. */
@@ -20,11 +22,14 @@ interface WorkspaceProps {
   headerExtra?: ReactNode;
 }
 
-/** The complete local prototype (Student, Teacher, Developer views). Gameplay here is simulated and local, never authoritative. */
-export default function GameWorkspace({ storageKey, settings, embedded = false, badge = 'Prototype · local data only', headerExtra }: WorkspaceProps) {
+/** The local prototype UI. Gameplay here is simulated and local, never authoritative, and no view in it can reach Firebase. */
+export default function GameWorkspace({ surface, devTools = null, storageKey, settings, embedded = false, badge = 'Prototype · local data only', headerExtra }: WorkspaceProps) {
   const repo = useMemo(() => new LocalStorageRepository(storageKey), [storageKey]);
   const game = useGame(repo, settings);
-  const [view, setView] = useState<View>('student');
+  const allowed = allowedViews(surface, devTools !== null);
+  const [requested, setView] = useState<WorkspaceView>('student');
+  const view = effectiveView(requested, allowed); // state manipulation can never select a view this surface does not allow
+  const DevTools = surface === 'demo' ? devTools : null;
   const [presenting, setPresenting] = useState(false);
 
   if (presenting) {
@@ -39,29 +44,31 @@ export default function GameWorkspace({ storageKey, settings, embedded = false, 
     );
   }
 
-  const tabs: [View, string][] = [
-    ['student', 'Student'],
-    ['teacher', 'Teacher'],
-    ['dev', 'Developer'],
-  ];
+  const labels: Record<WorkspaceView, string> = { student: 'Student', teacher: 'Teacher', dev: 'Developer (simulation)' };
   return (
     <div className={embedded ? 'workspace' : 'app'}>
       <header>
         {!embedded && <h1>⚔️ Math Boss</h1>}
         <span className="badge">{badge}</span>
         {headerExtra}
-        <nav aria-label="Views">
-          {tabs.map(([key, label]) => (
-            <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
-              {label}
-            </button>
-          ))}
-        </nav>
+        {allowed.length > 1 && (
+          <nav aria-label="Views">
+            {allowed.map((key) => (
+              <button key={key} data-view={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>
+                {labels[key]}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
       <main>
         {view === 'student' && <StudentView game={game} />}
         {view === 'teacher' && <TeacherView game={game} onPresent={() => setPresenting(true)} />}
-        {view === 'dev' && <DevPanel game={game} />}
+        {view === 'dev' && DevTools && (
+          <Suspense fallback={<p className="muted">Loading developer tools…</p>}>
+            <DevTools game={game} />
+          </Suspense>
+        )}
       </main>
     </div>
   );

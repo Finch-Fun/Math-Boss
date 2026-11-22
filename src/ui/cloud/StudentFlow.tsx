@@ -120,6 +120,7 @@ function ClassroomHome({ cloud, user, entry, onBack }: { cloud: Cloud; user: Clo
         </p>
       </Card>
       <GameWorkspace
+        surface="student-practice"
         embedded
         badge="Practice · not shared with class"
         storageKey={practiceStorageKey(user.uid, classroom.id)}

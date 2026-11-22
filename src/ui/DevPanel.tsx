@@ -13,7 +13,8 @@ export default function DevPanel({ game }: { game: Game }) {
   return (
     <div className="stack">
       <section className="card dev">
-        <h2>Developer testing mode</h2>
+        <h2>Developer simulation tools</h2>
+        <p className="notice">Simulation only. These tools change this browser's local demo game and can never touch a Firebase classroom. They exist only in development builds.</p>
         <p className="muted small">
           Game time: <strong>{fmtGameTime(s.now)}</strong> · Phase: <strong>{s.battle.phase}</strong> · Week {s.battle.weekIndex}. The game state is saved in this browser only.
         </p>
