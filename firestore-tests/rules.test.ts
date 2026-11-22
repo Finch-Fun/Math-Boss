@@ -302,3 +302,38 @@ describe('cross-classroom isolation', () => {
     await assertFails(requestJoin(student('s3'), 's3', 'c2', 'ABCD2345'));
   });
 });
+
+describe('student privacy and role separation', () => {
+  async function twoStudents() {
+    await seedAllowlist('a@school.org');
+    await createClassroom(teacherA(), 'tA', 'c1', 'ABCD2345');
+    await requestJoin(student('s1'), 's1', 'c1', 'ABCD2345');
+    await requestJoin(student('s2'), 's2', 'c1', 'ABCD2345', 'pending', 'Moon Cat');
+    await approve(teacherA(), 'tA', 'c1', 's1');
+    await approve(teacherA(), 'tA', 'c1', 's2', 'Moon Cat');
+    await setDoc(doc(teacherA(), 'teacherProfiles', 'tA'), { displayName: 'A', email: 'a@school.org', updatedAt: serverTimestamp() });
+  }
+
+  it('an approved student sees only their own records, never the roster, classmates, or teacher data', async () => {
+    await twoStudents();
+    const s1 = student('s1');
+    await assertSucceeds(getDoc(doc(s1, 'classrooms', 'c1', 'members', 's1')));
+    await assertSucceeds(getDoc(doc(s1, 'classrooms', 'c1', 'players', 's1')));
+    await assertFails(getDoc(doc(s1, 'classrooms', 'c1', 'members', 's2')));
+    await assertFails(getDoc(doc(s1, 'classrooms', 'c1', 'players', 's2')));
+    await assertFails(getDocs(collection(s1, 'classrooms', 'c1', 'members')));
+    await assertFails(getDocs(collection(s1, 'classrooms', 'c1', 'players')));
+    await assertFails(getDoc(doc(s1, 'teacherProfiles', 'tA')));
+    await assertFails(getDocs(query(collection(s1, 'classrooms'), where('ownerUid', '==', 'tA'))));
+  });
+
+  it('students cannot edit classroom settings, rosters or join codes (teacher-only operations)', async () => {
+    await twoStudents();
+    const s1 = student('s1');
+    await assertFails(updateDoc(doc(s1, 'classrooms', 'c1'), { name: 'Mine now', updatedAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(s1, 'classrooms', 'c1', 'members', 's2'), { status: 'removed', approvedAt: serverTimestamp(), approvedBy: 's1' }));
+    await assertFails(deleteDoc(doc(s1, 'classrooms', 'c1', 'players', 's2')));
+    await assertFails(updateDoc(doc(s1, 'joinCodes', 'ABCD2345'), { classroomName: 'x' }));
+    await assertFails(deleteDoc(doc(s1, 'joinCodes', 'ABCD2345')));
+  });
+});

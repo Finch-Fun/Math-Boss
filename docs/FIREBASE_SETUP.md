@@ -87,6 +87,22 @@ Classroom documents hold: owner UID, name, grade level, timezone, join code, joi
 * **Demo mode:** the whole prototype (Daily Review, Bonus Questions, coins, four upgrades, upgrade subtraction, boss and castle, shared projects, Developer tools, Teacher Battle Report) against a simulated class saved in `localStorage`. No Firebase code is loaded.
 * **Firebase mode:** sign-in, classrooms, join codes, roster and approval, settings, and persistent membership are real and stored in Firestore. Gameplay shown inside a classroom (the "Demo gameplay" tab for teachers, "Practice" for students) is the same local simulation, seeded with the classroom's settings, saved under a per-user, per-classroom local key, and **clearly labelled as not shared**. Nothing from it is written to Firestore.
 
+## Roles, navigation and developer tools
+
+| Who | Sees | Never sees |
+|---|---|---|
+| Student (Firebase) | Student gameplay only: Daily Review, Bonus Questions, upgrades, boss and castle, shared projects, their own membership. No view switcher at all. | Teacher view, Battle Report, roster, settings, developer tools |
+| Approved teacher | My Classrooms, roster and approvals, join code, settings, and a **Demo gameplay** preview (Student and Teacher/Battle Report views of a *simulated* class) | Developer tools |
+| Local development (`npm run dev`) | Demo from the entry screen with Student, Teacher and **Developer (simulation)** views | n/a |
+| Production build | No developer tools, and no demo entry when Firebase is configured | n/a |
+
+How it is enforced:
+
+* **Structure, not hidden buttons.** `src/cloud/access.ts` decides which views a screen may mount (`student-practice`: Student only; `teacher-preview`: Student and Teacher; `demo`: all). `GameWorkspace` clamps any requested view to that list, so the Teacher and Developer components are never rendered for a student, whatever the UI state says. The app has no URL routes, so there is no deep link to bypass.
+* **Developer tools are a build-time feature.** `src/ui/devTools.tsx` checks `import.meta.env.DEV`, which Vite turns into a literal: in `vite build` the DevPanel module and `game/dev` helpers are not emitted (a test bundles both ways and checks). It does not read a user, role or Firestore field. Only the local demo is ever handed the tools.
+* **Preview and practice never write to Firebase.** The local game views have no access to the Firebase layer (a test checks their imports); they save to per-user localStorage keys and are labelled simulated.
+* **Real data is protected by `firestore.rules`**, unchanged by this change apart from extra tests: ownership and membership checks, no client-written coins, upgrades, boss or castle state.
+
 ## What works on the free Spark plan, and what will not
 
 Works on Spark: Google and anonymous sign-in, Firestore with these rules, emulators, and everything in this milestone. Reads are on demand (no live listeners, no polling), and writes happen only on classroom or roster changes. Rule lookups (`exists`/`get`) count as reads; at pilot size this is far below the free daily quota.

@@ -50,6 +50,7 @@ export default function ClassroomDashboard({ cloud, classroom, onUpdated, onBack
             students: shared combat, coins and upgrades are not live yet.
           </p>
           <GameWorkspace
+            surface="teacher-preview"
             embedded
             badge="Simulated · not your students"
             storageKey={practiceStorageKey('teacher-preview', classroom.id)}

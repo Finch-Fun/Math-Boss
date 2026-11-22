@@ -1,6 +1,8 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
 import { viteEnv } from '../cloud/env';
+import { demoOffered } from '../cloud/access';
 import { DEMO_STORAGE_KEY, resolveMode } from '../cloud/mode';
+import { devTools } from './devTools';
 import GameWorkspace from './GameWorkspace';
 
 // The Firebase screens (and the Firebase SDK behind them) load only when someone chooses a Firebase flow.
@@ -10,11 +12,14 @@ type Screen = 'entry' | 'demo' | 'teacher' | 'student';
 
 export default function App() {
   const mode = useMemo(() => resolveMode(viteEnv), []);
+  const showDemo = demoOffered(mode.available === 'firebase', devTools !== null);
   const [screen, setScreen] = useState<Screen>(mode.available === 'firebase' ? 'entry' : 'demo');
 
   if (screen === 'demo') {
     return (
       <GameWorkspace
+        surface="demo"
+        devTools={devTools}
         storageKey={DEMO_STORAGE_KEY}
         badge={mode.available === 'firebase' ? 'Demo mode · local data only' : 'Demo mode · Firebase not configured'}
         headerExtra={
@@ -48,11 +53,13 @@ export default function App() {
             <p className="muted">Enter the code from your teacher to join your classroom.</p>
             <button className="primary" onClick={() => setScreen('student')}>Join a classroom</button>
           </section>
-          <section className="card">
-            <h2>Try the demo</h2>
-            <p className="muted">Play the simulated class on this device. No account, nothing is shared.</p>
-            <button onClick={() => setScreen('demo')}>Open demo</button>
-          </section>
+          {showDemo && (
+            <section className="card">
+              <h2>Try the demo</h2>
+              <p className="muted">Play the simulated class on this device. No account, nothing is shared. (Development builds only.)</p>
+              <button onClick={() => setScreen('demo')}>Open demo</button>
+            </section>
+          )}
         </div>
       </div>
     );
@@ -60,7 +67,7 @@ export default function App() {
 
   return (
     <Suspense fallback={<div className="app"><p className="muted">Loading…</p></div>}>
-      <CloudApp role={screen} onBack={() => setScreen('entry')} onDemo={() => setScreen('demo')} />
+      <CloudApp role={screen} onBack={() => setScreen('entry')} />
     </Suspense>
   );
 }

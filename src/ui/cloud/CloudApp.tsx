@@ -8,11 +8,10 @@ import TeacherFlow from './TeacherFlow';
 interface Props {
   role: 'teacher' | 'student';
   onBack: () => void;
-  onDemo: () => void;
 }
 
 /** Loads the Firebase SDK on demand, restores the saved session, and hands control to the teacher or student flow. */
-export default function CloudApp({ role, onBack, onDemo }: Props) {
+export default function CloudApp({ role, onBack }: Props) {
   const [cloud, setCloud] = useState<Cloud | null>(null);
   const [loadError, setLoadError] = useState('');
   const [user, setUser] = useState<CloudUser | null>(null);
@@ -45,7 +44,6 @@ export default function CloudApp({ role, onBack, onDemo }: Props) {
         <span className="badge">{role === 'teacher' ? 'Teacher' : 'Student'} · Firebase</span>
         <nav>
           <button onClick={onBack}>← Back</button>
-          <button onClick={onDemo}>Demo</button>
         </nav>
       </header>
       {loadError && <p className="error" role="alert">{loadError}</p>}
