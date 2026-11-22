@@ -1,0 +1,223 @@
+rules_version = '2';
+
+// Math Boss Firestore rules (Milestone 1).
+//
+// Trust model
+//   * Teachers: Google sign-in + verified email that appears in /teacherAllowlist (managed only in the Firebase
+//     console / Admin SDK, no client can read or write it). There is NO client-editable role field anywhere.
+//   * Students: any other signed-in user (anonymous or linked). They can request membership with a join code, and a
+//     teacher (or the classroom's "auto" setting) approves it.
+//   * Coins, upgrades, boss HP and castle HP are never client-writable. Player documents can be CREATED only with
+//     zero coins and zero upgrades; there is no update rule. Authoritative changes need a trusted backend later.
+//
+// Cost note: exists()/get() calls in rules are billed as document reads (well inside the free Spark quota at pilot size).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isTeacher() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email_verified == true
+        && exists(/databases/$(database)/documents/teacherAllowlist/$(request.auth.token.email.lower()));
+    }
+
+    function classroomPath(cid) {
+      return /databases/$(database)/documents/classrooms/$(cid);
+    }
+
+    function memberPath(cid, uid) {
+      return /databases/$(database)/documents/classrooms/$(cid)/members/$(uid);
+    }
+
+    function isOwner(cid) {
+      return isTeacher() && get(classroomPath(cid)).data.ownerUid == request.auth.uid;
+    }
+
+    function isActiveMember(cid) {
+      return signedIn()
+        && exists(memberPath(cid, request.auth.uid))
+        && get(memberPath(cid, request.auth.uid)).data.status == 'active';
+    }
+
+    function validDailyQuestion(n) {
+      return n is int && n >= 0 && n <= 20;
+    }
+
+    function validSettings(s) {
+      return s is map
+        && s.keys().hasOnly(['requireMathForUpgrades', 'dailyQuestions', 'difficultyPreset', 'skills', 'bossDifficulty', 'bonusEnabled'])
+        && s.keys().hasAll(['requireMathForUpgrades', 'dailyQuestions', 'difficultyPreset', 'skills', 'bossDifficulty', 'bonusEnabled'])
+        && s.requireMathForUpgrades is bool
+        && s.bonusEnabled is bool
+        && s.difficultyPreset in ['foundations', 'balanced', 'challenge']
+        && s.bossDifficulty in ['easy', 'normal', 'hard']
+        && s.skills is list
+        && s.skills.size() >= 1
+        && s.skills.size() <= 6
+        && s.skills.hasOnly(['addition', 'subtraction', 'multiplication', 'division', 'fractions', 'missing'])
+        && s.dailyQuestions is list
+        && s.dailyQuestions.size() == 7
+        && validDailyQuestion(s.dailyQuestions[0])
+        && validDailyQuestion(s.dailyQuestions[1])
+        && validDailyQuestion(s.dailyQuestions[2])
+        && validDailyQuestion(s.dailyQuestions[3])
+        && validDailyQuestion(s.dailyQuestions[4])
+        && validDailyQuestion(s.dailyQuestions[5])
+        && validDailyQuestion(s.dailyQuestions[6]);
+    }
+
+    function validClassroom(d) {
+      return d.keys().hasOnly(['ownerUid', 'name', 'gradeLevel', 'timezone', 'joinCode', 'joinApproval', 'status', 'settings', 'createdAt', 'updatedAt'])
+        && d.keys().hasAll(['ownerUid', 'name', 'gradeLevel', 'timezone', 'joinCode', 'joinApproval', 'status', 'settings', 'createdAt', 'updatedAt'])
+        && d.ownerUid == request.auth.uid
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 60
+        && d.gradeLevel in ['K', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'Mixed']
+        && d.timezone is string && d.timezone.size() >= 1 && d.timezone.size() <= 64
+        && d.joinCode is string && d.joinCode.matches('^[2-9A-HJKMNP-Z]{8}$')
+        && d.joinApproval in ['teacher', 'auto']
+        && d.status in ['active', 'archived']
+        && validSettings(d.settings)
+        && d.updatedAt == request.time;
+    }
+
+    // ---------- teacher allowlist: console only ----------
+    match /teacherAllowlist/{email} {
+      allow read, write: if false;
+    }
+
+    // ---------- teacher profile (no role data lives here) ----------
+    match /teacherProfiles/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create, update: if isTeacher()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['displayName', 'email', 'updatedAt'])
+        && request.resource.data.keys().hasAll(['displayName', 'email', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 100
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // ---------- classrooms ----------
+    match /classrooms/{cid} {
+      allow get: if (isTeacher() && resource.data.ownerUid == request.auth.uid) || isActiveMember(cid);
+      allow list: if isTeacher() && resource.data.ownerUid == request.auth.uid;
+
+      allow create: if isTeacher()
+        && validClassroom(request.resource.data)
+        && request.resource.data.status == 'active'
+        && request.resource.data.createdAt == request.time;
+
+      allow update: if isTeacher()
+        && resource.data.ownerUid == request.auth.uid
+        && validClassroom(request.resource.data)
+        && request.resource.data.createdAt == resource.data.createdAt;
+
+      allow delete: if false; // archive instead, so student history is never lost by accident
+
+      // Roster: one membership document per student, keyed by the student's auth UID (so nobody can impersonate another UID).
+      match /members/{uid} {
+        allow get: if signedIn() && (request.auth.uid == uid || isOwner(cid));
+        allow list: if isOwner(cid);
+
+        // A student asks to join. Knowing the current join code is the proof; the classroom decides pending vs active.
+        allow create: if signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['uid', 'displayName', 'status', 'joinCode', 'requestedAt'])
+          && request.resource.data.keys().hasAll(['uid', 'displayName', 'status', 'joinCode', 'requestedAt'])
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.displayName is string
+          && request.resource.data.displayName.size() >= 2
+          && request.resource.data.displayName.size() <= 24
+          && get(classroomPath(cid)).data.status == 'active'
+          && request.resource.data.joinCode == get(classroomPath(cid)).data.joinCode
+          && request.resource.data.status == (get(classroomPath(cid)).data.joinApproval == 'auto' ? 'active' : 'pending')
+          && request.resource.data.requestedAt == request.time;
+
+        // Only the owning teacher changes membership status. Nothing else on the document can change.
+        allow update: if isOwner(cid)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedAt', 'approvedBy'])
+          && request.resource.data.status in ['active', 'removed']
+          && request.resource.data.approvedBy == request.auth.uid
+          && request.resource.data.approvedAt == request.time;
+
+        allow delete: if isOwner(cid);
+      }
+
+      // Persistent progression. Create-only with zero values; no client can ever update coins, upgrades or damage.
+      match /players/{uid} {
+        allow get: if signedIn() && (request.auth.uid == uid || isOwner(cid));
+        allow list: if isOwner(cid);
+
+        allow create: if signedIn()
+          && (isOwner(cid) || request.auth.uid == uid)
+          && request.resource.data.keys().hasOnly(['uid', 'nickname', 'coins', 'lifetimeCoins', 'upgrades', 'createdAt'])
+          && request.resource.data.keys().hasAll(['uid', 'nickname', 'coins', 'lifetimeCoins', 'upgrades', 'createdAt'])
+          && request.resource.data.uid == uid
+          && request.resource.data.coins == 0
+          && request.resource.data.lifetimeCoins == 0
+          && request.resource.data.upgrades == {'damage': 0, 'speed': 0, 'critChance': 0, 'critDamage': 0}
+          && request.resource.data.createdAt == request.time
+          && getAfter(memberPath(cid, uid)).data.status == 'active'
+          && request.resource.data.nickname == getAfter(memberPath(cid, uid)).data.displayName;
+
+        allow update: if false;
+        allow delete: if isOwner(cid);
+      }
+
+      // Reserved for the multiplayer milestone: shared boss/castle state will be written by a trusted backend only.
+      match /battle/{docId} {
+        allow read: if isOwner(cid) || isActiveMember(cid);
+        allow write: if false;
+      }
+    }
+
+    // ---------- join codes: look up by exact code, never list ----------
+    match /joinCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+
+      allow create: if isTeacher()
+        && request.resource.data.keys().hasOnly(['classroomId', 'ownerUid', 'classroomName', 'joinApproval'])
+        && request.resource.data.keys().hasAll(['classroomId', 'ownerUid', 'classroomName', 'joinApproval'])
+        && request.resource.data.ownerUid == request.auth.uid
+        && getAfter(classroomPath(request.resource.data.classroomId)).data.ownerUid == request.auth.uid
+        && getAfter(classroomPath(request.resource.data.classroomId)).data.joinCode == code
+        && getAfter(classroomPath(request.resource.data.classroomId)).data.name == request.resource.data.classroomName
+        && getAfter(classroomPath(request.resource.data.classroomId)).data.joinApproval == request.resource.data.joinApproval;
+
+      // A denormalized copy for students (who cannot read the classroom before approval); only the label fields may change.
+      allow update: if isTeacher()
+        && resource.data.ownerUid == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['classroomName', 'joinApproval'])
+        && getAfter(classroomPath(resource.data.classroomId)).data.joinCode == code
+        && getAfter(classroomPath(resource.data.classroomId)).data.name == request.resource.data.classroomName
+        && getAfter(classroomPath(resource.data.classroomId)).data.joinApproval == request.resource.data.joinApproval;
+
+      allow delete: if isTeacher() && resource.data.ownerUid == request.auth.uid;
+    }
+
+    // ---------- "my classrooms" index so a returning student can find their classroom ----------
+    match /studentClassrooms/{uid}/classrooms/{cid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['classroomId', 'classroomName', 'joinedAt'])
+        && request.resource.data.keys().hasAll(['classroomId', 'classroomName', 'joinedAt'])
+        && request.resource.data.classroomId == cid
+        && request.resource.data.classroomName is string
+        && request.resource.data.classroomName.size() <= 60
+        && request.resource.data.joinedAt == request.time
+        && getAfter(memberPath(cid, uid)).data.uid == uid;
+      allow update, delete: if false;
+    }
+
+    // Everything else is denied by default.
+  }
+}
