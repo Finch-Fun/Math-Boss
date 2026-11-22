@@ -60,7 +60,7 @@ export function bossMaxHp(s: GameState, number: number): number {
   );
 }
 
-/** 110 HP/hour for a 25-student class, scaled linearly by class size (assumption), x1.2 per stage. */
+/** 120 HP/hour for a 25-student class, scaled linearly by class size (assumption), x1.2 per stage. */
 export function bossAttackPerHour(studentCount: number, number: number): number {
   const base = (TUNING.bossAttackPerHourRef * studentCount) / REFERENCE_CLASS_SIZE;
   return Math.round(base * TUNING.bossAttackGrowth ** (number - 1) * 100) / 100;

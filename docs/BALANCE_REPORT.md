@@ -1,10 +1,10 @@
 # Math Boss: Balance Validation Report (prototype)
 
-Scope: one validation pass over the provisional combat values in `docs/GAME_DESIGN.md` v1.3. **No gameplay default was changed.**
-The defaults live in `DEFAULT_TUNING` (`src/game/constants.ts`) and a unit test pins them to the design document.
-Everything below is a *recommendation* for the owner to accept or reject.
+Scope: one validation pass over the provisional combat values in `docs/GAME_DESIGN.md` v1.3.
 
-Reproduce: `npm run balance -- study` (add `--weeks 30 --seeds 6` for the numbers quoted here), `-- curve`, `-- sweep --grid '{...}'`.
+**Status: Package P (section 4) was approved by the owner for prototype testing and is now applied.** The defaults live in `DEFAULT_TUNING` (`src/game/constants.ts`) and a unit test pins them. They equal the design document except `noSpawnWindowHours` 2 -> 30 and `bossAttackPerHourRef` 110 -> 120. Sections 2-3 describe the *original* values; section 4 results were re-confirmed on the final defaults (identical output to the pre-change sweep).
+
+Reproduce the "original values" tables with `npm run balance -- sweep --grid '{"noSpawnWindowHours":[2],"bossAttackPerHourRef":[110]}'`, and the final ones with `npm run balance -- study` (add `--weeks 30 --seeds 6` for the numbers quoted here), `-- curve`, `-- sweep --grid '{...}'`.
 Source: `src/sim/balanceSim.ts` (simulator), `src/sim/cli.ts` (reports and acceptance criteria).
 
 ## 1. Method
@@ -67,9 +67,9 @@ That is a feature of the timing, not of the constant, because the breaches land 
 | Faster auto-reconstruction or question repair alone | No effect on breach rates, as above. Rejected. |
 | **Package P (below)** | Meets all seven acceptance criteria at 10 and 25 students and six of seven at 40. Keeps the donation stake. Holds up at 60% attendance. |
 
-## 4. Recommendation: Package P
+## 4. Package P (approved and applied)
 
-Two changes, both in `DEFAULT_TUNING`:
+Two changes, made in `DEFAULT_TUNING`:
 
 1. `noSpawnWindowHours` 2 -> **30**. A new boss does not appear when 30 hours or fewer remain in the week.
    This reads the design's own wording in section 13.2 ("provided sufficient campaign time remains") as a longer cutoff than the 2-hour floor in section 11.2.
@@ -98,7 +98,7 @@ Side effects to accept knowingly:
   If the owner wants something to do in that window, that is a feature decision, not a balance one.
 - Boss 1 combat time (38.6h) is unchanged and above the 30h target. Raising class DPS is the lever, if the owner wants to hit 30h exactly.
 - At 40 students with moderate donations the breach rate is 4%, just under the 5% floor of our own "occasional breaches" criterion. This is noise-level and not worth a separate tweak.
-- If adopted, the project blurbs and examples in `docs/GAME_DESIGN.md` that mention a 2-hour cutoff or 110 attack/hour need updating.
+- `docs/GAME_DESIGN.md` carries short prototype notes next to the 2-hour cutoff and the 110 attack/hour; the rest of that document is unchanged.
 
 ## 5. Assumptions and caveats
 
@@ -114,3 +114,4 @@ Side effects to accept knowingly:
 - `src/sim/*`: simulator, CLI, and 5 tests.
 - Build fixes: `"types": ["node"]` in `tsconfig.json` (TypeScript 6 no longer auto-loads `@types`) and `src/globals.d.ts` for CSS imports.
 - Two tests pin the default values and the spawn-cutoff knob.
+- After approval: defaults changed to 30h / 120, and the tests that assumed 110/hour or a 2-hour cutoff were updated (53 tests pass).

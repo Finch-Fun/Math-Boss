@@ -517,6 +517,8 @@ The next campaign begins on Monday.
 
 No new boss should spawn within the final two hours of a campaign.
 
+> Prototype note: after balance testing (docs/BALANCE_REPORT.md) the prototype uses a 30-hour no-spawn window.
+
 ---
 
 # 12. Automatic Boss Combat
@@ -666,7 +668,7 @@ Initial proposal: one attack per hour.
 
 Example for a 25-student classroom:
 
-- Boss 1: 110 damage per hour
+- Boss 1: 110 damage per hour (prototype: 120, see docs/BALANCE_REPORT.md)
 - Boss 2: 132 damage per hour
 
 Incoming damage increases with subsequent bosses.
@@ -1046,7 +1048,7 @@ These are **provisional targets**, not permanently approved values.
 | Boss attack increase | 1.2× per stage |
 | Boss training period | 24 hours |
 | Castle HP | 400 per expected participant |
-| Initial castle attack | 110 HP/hour for 25 students |
+| Initial castle attack | 110 HP/hour for 25 students (prototype: 120) |
 | Castle breach recovery | 25% HP |
 | Proposed armor cap | 50% |
 | Suggested shared spending | 25–30% of class earnings |

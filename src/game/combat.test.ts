@@ -12,11 +12,11 @@ import { upgradeCost } from './upgrades';
 
 const near = (a: number, b: number, tolerance = 1e-6) => assert.ok(Math.abs(a - b) <= tolerance * Math.max(1, Math.abs(b)), `${a} vs ${b}`);
 
-test('castle HP is 400 per student and Boss 1 hits a 25-student castle for 110/hour', () => {
+test('castle HP is 400 per student and Boss 1 hits a 25-student castle for 120/hour', () => {
   const s = makeGame();
   assert.equal(castleMaxHp(s), 10_000);
-  assert.equal(s.battle.boss!.attackPerHour, 110);
-  assert.equal(bossAttackPerHour(25, 2), 132);
+  assert.equal(s.battle.boss!.attackPerHour, 120);
+  assert.equal(bossAttackPerHour(25, 2), 144);
 });
 
 test('boss HP grows 1.5x per stage', () => {
@@ -59,7 +59,7 @@ test('the first correct answer starts the boss attack clock', () => {
   submitDailyAnswer(s, 's1', answerFor(s, 's1', true));
   assert.equal(s.battle.nextAttackAt, s.now + HOUR);
   advance(s, s.now + HOUR);
-  assert.equal(s.battle.castleHp, 10_000 - 110);
+  assert.equal(s.battle.castleHp, 10_000 - 120);
 });
 
 test('idle damage equals class DPS x elapsed time', () => {
@@ -84,7 +84,7 @@ test('boss defeat starts a 24-hour training period, then a stronger boss appears
   assert.equal(s.battle.phase, 'training');
   assert.equal(s.battle.bossesDefeated, 1);
   const castleAfterVictory = s.battle.castleHp;
-  assert.ok(castleAfterVictory >= 10_000 - 110);
+  assert.ok(castleAfterVictory >= 10_000 - 120);
   const damageAtVictory = getStudent(s, 's1').weekDamage;
 
   advance(s, start + hours(13)); // mid-training: nothing attacks, nothing is damaged
@@ -96,7 +96,7 @@ test('boss defeat starts a 24-hour training period, then a stronger boss appears
   assert.equal(s.battle.phase, 'combat');
   const boss2 = s.battle.boss!;
   assert.equal(boss2.number, 2);
-  assert.equal(boss2.attackPerHour, 132);
+  assert.equal(boss2.attackPerHour, 144);
   assert.ok(boss2.maxHp - boss2.hp < 100); // only about a second of fighting so far
   assert.ok(Math.abs(boss2.maxHp - stage1Hp * 1.5) <= 2);
   assert.equal(s.battle.bossesDefeated, 1);
@@ -116,13 +116,13 @@ test('boss attacks hit the castle once an hour, reduced by armor', () => {
   const s = makeGame();
   devActivateAll(s);
   advance(s, s.now + hours(3));
-  assert.equal(s.battle.castleHp, 10_000 - 3 * 110);
+  assert.equal(s.battle.castleHp, 10_000 - 3 * 120);
 
   const armored = makeGame();
   armored.projects.plating.level = 2; // 10% armor
   devActivateAll(armored);
   advance(armored, armored.now + hours(3));
-  assert.equal(armored.battle.castleHp, 10_000 - 3 * 99);
+  assert.equal(armored.battle.castleHp, 10_000 - 3 * 108);
 });
 
 test('castle breach pauses student damage, then recovers to 25% and combat resumes', () => {
@@ -197,7 +197,7 @@ test('weekly reset restores the castle and boss but keeps coins and upgrades', (
   assert.equal(s.history[0].bossesDefeated, 2);
 });
 
-test('no new boss spawns in the final two hours of the campaign', () => {
+test('no new boss spawns in the final 30 hours of the campaign', () => {
   const late = makeGame();
   devActivateAll(late);
   late.battle.phase = 'training';
@@ -215,8 +215,8 @@ test('no new boss spawns in the final two hours of the campaign', () => {
   early.battle.nextAttackAt = null;
   early.battle.bossesDefeated = 1;
   early.battle.boss!.hp = 0;
-  early.battle.trainingEndsAt = early.battle.weekEnd - hours(3);
-  advance(early, early.battle.weekEnd - hours(2) - 60_000);
+  early.battle.trainingEndsAt = early.battle.weekEnd - hours(31);
+  advance(early, early.battle.weekEnd - hours(30) - 60_000);
   assert.equal(early.battle.phase, 'combat');
   assert.equal(early.battle.boss!.number, 2);
 });
@@ -237,16 +237,16 @@ test('simulated classmates are deterministic and keep the game state valid over 
   assert.ok(a.battle.boss!.hp >= 0);
 });
 
-test('provisional combat values still match docs/GAME_DESIGN.md (changing them is a design decision)', () => {
+test('default combat values: design values plus the two owner-approved changes (30h spawn cutoff, 120 attack/hour)', () => {
   assert.deepEqual(
     { ...DEFAULT_TUNING },
     {
       castleHpPerStudent: 400,
-      bossAttackPerHourRef: 110,
+      bossAttackPerHourRef: 120,
       bossAttackGrowth: 1.2,
       bossHpGrowth: 1.5,
       bossTargetHours: 30,
-      noSpawnWindowHours: 2,
+      noSpawnWindowHours: 30,
       breachRecoveryFraction: 0.25,
       autoReconstructionPerHour: 0.005,
       questionRepairFraction: 0.001,
@@ -259,7 +259,7 @@ test('provisional combat values still match docs/GAME_DESIGN.md (changing them i
   assert.deepEqual({ ...TUNING }, { ...DEFAULT_TUNING }); // nothing left overridden by another test
 });
 
-test('the spawn cutoff is tunable: a longer cutoff means no new boss late in the week', () => {
+test('the spawn cutoff is tunable: the old 2-hour cutoff still allows a boss with 20 hours left', () => {
   const setup = () => {
     const s = makeGame();
     devActivateAll(s);
@@ -272,13 +272,13 @@ test('the spawn cutoff is tunable: a longer cutoff means no new boss late in the
   };
   const normal = setup();
   advance(normal, normal.battle.weekEnd - hours(19));
-  assert.equal(normal.battle.phase, 'combat'); // default: only the final 2 hours are excluded
+  assert.equal(normal.battle.phase, 'idle'); // default: no boss with 30 hours or fewer left
 
-  setTuning({ noSpawnWindowHours: 30 });
+  setTuning({ noSpawnWindowHours: 2 }); // the original design-document floor
   try {
-    const strict = setup();
-    advance(strict, strict.battle.weekEnd - hours(19));
-    assert.equal(strict.battle.phase, 'idle');
+    const old = setup();
+    advance(old, old.battle.weekEnd - hours(19));
+    assert.equal(old.battle.phase, 'combat');
   } finally {
     resetTuning();
   }
