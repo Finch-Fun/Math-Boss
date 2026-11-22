@@ -2,3 +2,12 @@ node_modules
 dist
 .DS_Store
 *.log
+.env
+.env.*
+!.env.example
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+serviceAccount*.json
+*-service-account*.json

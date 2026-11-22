@@ -4,7 +4,7 @@ import { freshProjects } from './projects';
 import { ALL_SKILLS } from './questions';
 import { weekEndOf, weekStartOf } from './time';
 import { emptyUpgrades } from './upgrades';
-import type { GameState, Strategy, Student } from './types';
+import type { GameState, Settings, Strategy, Student } from './types';
 
 const NICKNAMES = [
   'Maple', 'Comet', 'Pixel', 'Otter', 'Juniper', 'Falcon', 'Nova', 'Biscuit', 'Ember', 'Willow', 'Orbit', 'Pepper', 'Sage',
@@ -39,8 +39,20 @@ function makeStudent(i: number, now: number): Student {
   };
 }
 
+/** Default classroom settings (design §3). Also the defaults for a newly created Firebase classroom. */
+export function defaultSettings(): Settings {
+  return {
+    requireMathForUpgrades: false,
+    dailyQuestions: [10, 10, 10, 10, 10, 0, 0],
+    difficultyPreset: 'balanced',
+    skills: [...ALL_SKILLS],
+    bossDifficulty: 'normal',
+    bonusEnabled: true,
+  };
+}
+
 /** A fresh sample classroom. The first student (s1) is the human player; the rest are simulated classmates. */
-export function createGame(opts: { now: number; studentCount?: number; botsEnabled?: boolean }): GameState {
+export function createGame(opts: { now: number; studentCount?: number; botsEnabled?: boolean; settings?: Settings }): GameState {
   const count = opts.studentCount ?? 25;
   const students = Array.from({ length: count }, (_, i) => makeStudent(i, opts.now));
   const start = weekStartOf(opts.now);
@@ -51,14 +63,7 @@ export function createGame(opts: { now: number; studentCount?: number; botsEnabl
     playerId: 's1',
     className: 'Room 12 (Sample Class)',
     students,
-    settings: {
-      requireMathForUpgrades: false,
-      dailyQuestions: [10, 10, 10, 10, 10, 0, 0],
-      difficultyPreset: 'balanced',
-      skills: [...ALL_SKILLS],
-      bossDifficulty: 'normal',
-      bonusEnabled: true,
-    },
+    settings: opts.settings ? { ...opts.settings } : defaultSettings(),
     battle: {
       phase: 'combat',
       boss: null,

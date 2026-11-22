@@ -42,6 +42,10 @@ The battle is **event-driven**: between events (boss death, boss attack, trainin
 
 A simulator (`npm run balance -- study`) runs the real rules engine for 10/25/40-student classes at low to high donation rates. With the design's original numbers, classes won 1-2 bosses a week but the castle usually ended the week near 0-12% and mixed-donation classes breached in about 60% of weeks, mostly Sunday breaches from an unbeatable third boss. The owner approved two changes for prototype testing: a 30-hour no-spawn window (was 2) and Boss 1 attack of 120/hour (was 110). All other values are the design's provisional numbers. See [`docs/BALANCE_REPORT.md`](docs/BALANCE_REPORT.md).
 
+## Firebase classrooms (Milestone 1)
+
+With Firebase settings in `.env.local`, the app offers teacher sign-in, classroom creation, join codes, and teacher-approved student membership. Without them it runs the local demo exactly as before. Gameplay inside a Firebase classroom is still the local simulation and is labelled "not shared". Setup, security model, and Spark-plan notes: [`docs/FIREBASE_SETUP.md`](docs/FIREBASE_SETUP.md).
+
 ## Not built yet
 
-Real accounts, teacher-created questions, skill-level reports, school leaderboards, a full question bank, and Firebase.
+Shared multiplayer combat and authoritative coins/upgrades (needs a trusted backend), teacher-created questions, skill-level reports, school leaderboards, and a full question bank.
