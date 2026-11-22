@@ -41,7 +41,8 @@ export const BOSS_DIFFICULTY_MOD: Record<BossDifficulty, number> = { easy: 0.75,
 export const TRAINING_DURATION = 24 * HOUR; // confirmed
 
 /**
- * Provisional combat-balance values (design §12-§16, §22). The defaults equal the numbers in docs/GAME_DESIGN.md.
+ * Provisional combat-balance values (design §12-§16, §22). The defaults equal docs/GAME_DESIGN.md except two owner-approved changes from the balance report (docs/BALANCE_REPORT.md):
+ * noSpawnWindowHours 2 -> 30 and bossAttackPerHourRef 110 -> 120.
  * The game only ever reads TUNING; the balance simulator (src/sim) overrides it to test alternatives, then restores it.
  * Changing a default here is a game-design decision and needs owner approval.
  */
@@ -51,7 +52,7 @@ export interface Tuning {
   bossAttackGrowth: number; // attack multiplier per boss stage
   bossHpGrowth: number; // HP multiplier per boss stage
   bossTargetHours: number; // Boss 1 target active combat hours at Normal difficulty
-  noSpawnWindowHours: number; // a new boss never spawns when this many hours or fewer remain in the campaign (§11.2: 2; §13.2 also says "sufficient campaign time")
+  noSpawnWindowHours: number; // a new boss never spawns when this many hours or fewer remain in the campaign (approved for prototype testing: 30; the design doc §11.2 floor was 2)
   breachRecoveryFraction: number; // castle must recover to this share of max HP before combat resumes
   autoReconstructionPerHour: number; // share of max HP rebuilt per hour during a breach
   questionRepairFraction: number; // share of max HP per correct Daily Review answer during a breach
@@ -63,11 +64,11 @@ export interface Tuning {
 
 export const DEFAULT_TUNING: Readonly<Tuning> = Object.freeze({
   castleHpPerStudent: 400,
-  bossAttackPerHourRef: 110,
+  bossAttackPerHourRef: 120,
   bossAttackGrowth: 1.2,
   bossHpGrowth: 1.5,
   bossTargetHours: 30,
-  noSpawnWindowHours: 2,
+  noSpawnWindowHours: 30,
   breachRecoveryFraction: 0.25,
   autoReconstructionPerHour: 0.005, // placeholder: the design leaves emergency repair rates to balance testing
   questionRepairFraction: 0.001, // placeholder, as above

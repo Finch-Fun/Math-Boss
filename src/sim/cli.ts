@@ -31,7 +31,7 @@ const cell = (s: string | number, w: number): string => String(s).padEnd(w);
 
 function describeTuning(t: Partial<Tuning>): string {
   const diff = Object.entries(t).filter(([k, v]) => JSON.stringify(DEFAULT_TUNING[k as keyof Tuning]) !== JSON.stringify(v));
-  return diff.length ? diff.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ') : 'provisional defaults (docs/GAME_DESIGN.md)';
+  return diff.length ? diff.map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ') : 'current defaults (see docs/BALANCE_REPORT.md)';
 }
 
 /** Acceptance criteria used in docs/BALANCE_REPORT.md. `by` maps donation label -> summary for one class size. */
