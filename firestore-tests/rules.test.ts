@@ -198,13 +198,24 @@ describe('student joining and membership', () => {
   it('auto-approve classrooms admit students immediately, but still only with zero-value players', async () => {
     await setup({ joinApproval: 'auto' });
     await assertFails(requestJoin(student('s1'), 's1', 'c1', 'ABCD2345', 'pending')); // status must follow the classroom setting
-    const b = writeBatch(student('s1'));
-    b.set(doc(student('s1'), 'classrooms', 'c1', 'members', 's1'), { uid: 's1', displayName: 'Star Fox', status: 'active', joinCode: 'ABCD2345', requestedAt: serverTimestamp() });
-    b.set(doc(student('s1'), 'classrooms', 'c1', 'players', 's1'), {
+    // One Firestore instance for the whole batch: every doc() reference must come from the same instance as writeBatch().
+    const s1 = student('s1');
+    const b = writeBatch(s1);
+    b.set(doc(s1, 'classrooms', 'c1', 'members', 's1'), { uid: 's1', displayName: 'Star Fox', status: 'active', joinCode: 'ABCD2345', requestedAt: serverTimestamp() });
+    b.set(doc(s1, 'classrooms', 'c1', 'players', 's1'), {
       uid: 's1', nickname: 'Star Fox', coins: 0, lifetimeCoins: 0, upgrades: { damage: 0, speed: 0, critChance: 0, critDamage: 0 }, createdAt: serverTimestamp(),
     });
     await assertSucceeds(b.commit());
-    await assertSucceeds(getDoc(doc(student('s1'), 'classrooms', 'c1')));
+    await assertSucceeds(getDoc(doc(s1, 'classrooms', 'c1')));
+
+    // The auto-approve path must still reject a player that starts with coins.
+    const s2 = student('s2');
+    const bad = writeBatch(s2);
+    bad.set(doc(s2, 'classrooms', 'c1', 'members', 's2'), { uid: 's2', displayName: 'Moon Cat', status: 'active', joinCode: 'ABCD2345', requestedAt: serverTimestamp() });
+    bad.set(doc(s2, 'classrooms', 'c1', 'players', 's2'), {
+      uid: 's2', nickname: 'Moon Cat', coins: 500, lifetimeCoins: 500, upgrades: { damage: 0, speed: 0, critChance: 0, critDamage: 0 }, createdAt: serverTimestamp(),
+    });
+    await assertFails(bad.commit());
   });
 
   it('archived classrooms reject new joins', async () => {
