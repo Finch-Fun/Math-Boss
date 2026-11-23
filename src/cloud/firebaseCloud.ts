@@ -18,13 +18,17 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  onSnapshot,
   query,
   serverTimestamp,
   where,
   writeBatch,
   type Firestore,
 } from 'firebase/firestore';
+import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { readFirebaseConfig, type Env } from './config';
+import { FUNCTION_NAMES, type GameApi, type PlayerDoc } from './multiplayerTypes';
+import type { CampaignState } from '../game/campaign';
 import { CloudError, toCloudError } from './errors';
 import { COL, classroomFields, classroomFromDoc, initialPlayerFields, memberFromDoc, playerFromDoc } from './model';
 import type { AuthService, Classroom, ClassroomInput, Cloud, CloudUser, JoinPreview, Member, MyClassroom, RosterEntry, StudentService, TeacherService } from './types';
@@ -43,6 +47,7 @@ export function createCloud(env: Env): Cloud {
     (globalThis as { __mbEmu?: boolean }).__mbEmu = true;
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
+    connectFunctionsEmulator(getFunctions(app, 'us-central1'), '127.0.0.1', 5001);
   }
 
   const uid = (): string => {
@@ -272,5 +277,53 @@ export function createCloud(env: Env): Cloud {
       }),
   };
 
-  return { auth: authService, teacher, student };
+  // ---- trusted game service (Cloud Functions). The browser sends intents only; every number it gets back is the server's.
+  const functions = getFunctions(app, 'us-central1');
+  const call = async <T,>(name: string, data: object): Promise<T> => {
+    const attempt = async () => (await httpsCallable(functions, name)(data)).data as T;
+    try {
+      return await attempt();
+    } catch (e) {
+      // Retrying with the SAME request id is safe: the server replays the first outcome instead of repeating it.
+      const code = (e as { code?: string }).code;
+      if (code === 'functions/unavailable' || code === 'functions/internal' || code === 'functions/deadline-exceeded') {
+        try {
+          return await attempt();
+        } catch (e2) {
+          throw toCloudError(e2);
+        }
+      }
+      throw toCloudError(e);
+    }
+  };
+  const requestId = (): string => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/[^A-Za-z0-9_-]/g, '-');
+  const game: GameApi = {
+    sync: (classroomId) => call(FUNCTION_NAMES.sync, { classroomId }),
+    getDaily: (classroomId) => call(FUNCTION_NAMES.getDaily, { classroomId, requestId: requestId() }),
+    submitDaily: (classroomId, index, answer) => call(FUNCTION_NAMES.submitDaily, { classroomId, requestId: requestId(), index, answer }),
+    getBonus: (classroomId) => call(FUNCTION_NAMES.getBonus, { classroomId, requestId: requestId() }),
+    submitBonus: (classroomId, index, choice) => call(FUNCTION_NAMES.submitBonus, { classroomId, requestId: requestId(), index, choice }),
+    purchaseUpgrade: (classroomId, key, expectedLevel, claimedRemaining) =>
+      call(FUNCTION_NAMES.upgrade, { classroomId, requestId: requestId(), key, expectedLevel, ...(claimedRemaining === undefined ? {} : { claimedRemaining }) }),
+    donate: (classroomId, project, amount) => call(FUNCTION_NAMES.donate, { classroomId, requestId: requestId(), project, amount }),
+  };
+
+  const campaignRef = (cid: string) => doc(db, COL.classrooms, cid, COL.battle, 'campaign');
+  const live = {
+    watchCampaign: (cid: string, onData: (c: CampaignState | null) => void, onError: (e: Error) => void) =>
+      onSnapshot(campaignRef(cid), (snap) => onData(snap.exists() ? (snap.data() as unknown as CampaignState) : null), (e) => onError(toCloudError(e))),
+    watchMyPlayer: (cid: string, onData: (p: PlayerDoc | null) => void, onError: (e: Error) => void) =>
+      onSnapshot(playerRef(cid, uid()), (snap) => onData(snap.exists() ? (snap.data() as unknown as PlayerDoc) : null), (e) => onError(toCloudError(e))),
+  };
+
+  // The test clock exists only against the emulators (the server also refuses it unless it is the emulator with an explicit opt-in).
+  const devClock = cfg.useEmulator
+    ? {
+        set: async (ms: number) => ((await call<{ now: number }>(FUNCTION_NAMES.devClock, { action: 'set', ms })).now),
+        advance: async (ms: number) => ((await call<{ now: number }>(FUNCTION_NAMES.devClock, { action: 'advance', ms })).now),
+        reset: async () => ((await call<{ now: number }>(FUNCTION_NAMES.devClock, { action: 'reset' })).now),
+      }
+    : undefined;
+
+  return { auth: authService, teacher, student, game, live, devClock };
 }

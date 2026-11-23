@@ -78,7 +78,7 @@ Teacher-managed student accounts and one-time recovery codes need a trusted back
 | `classrooms/{id}/members/{uid}` | that student; owning teacher | student creates their own pending/active entry; only the owning teacher changes status |
 | `classrooms/{id}/players/{uid}` | that student; owning teacher | **create only, with zero values** (teacher on approval, or student when auto-approved). Never updated by a client. |
 | `studentClassrooms/{uid}/classrooms/{id}` | that student | that student, create only, and only alongside a membership |
-| `classrooms/{id}/battle/*` | owner; active members | **nobody** (reserved for the multiplayer milestone) |
+| `classrooms/{id}/battle/*` | owner; active members | **nobody** (the trusted Cloud Functions write it; see docs/MULTIPLAYER.md) |
 
 Classroom documents hold: owner UID, name, grade level, timezone, join code, join approval mode, active/archived status, settings (Daily Review questions per day, difficulty preset, skills, bonus questions, boss difficulty), and created/updated timestamps. Defaults come from the game design (`defaultSettings()`), and balance values are untouched.
 

@@ -337,3 +337,50 @@ describe('student privacy and role separation', () => {
     await assertFails(deleteDoc(doc(s1, 'joinCodes', 'ABCD2345')));
   });
 });
+
+describe('multiplayer authoritative state (PR #6)', () => {
+  async function classroomWithStudent() {
+    await seedAllowlist('a@school.org');
+    await createClassroom(teacherA(), 'tA', 'c1', 'ABCD2345');
+    await requestJoin(student('s1'), 's1', 'c1', 'ABCD2345');
+    await approve(teacherA(), 'tA', 'c1', 's1');
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      const adm = ctx.firestore();
+      await setDoc(doc(adm, 'classrooms', 'c1', 'battle', 'campaign'), { weekIndex: 1, castleHp: 100 });
+      await setDoc(doc(adm, 'classrooms', 'c1', 'serverOnly', 'secrets'), { questionSalt: 'x' });
+      await setDoc(doc(adm, 'serverOnly', 'devClock'), { mode: 'fixed', value: 1 });
+    });
+  }
+
+  it('members and the owning teacher read the shared campaign; outsiders and other teachers cannot', async () => {
+    await classroomWithStudent();
+    await seedAllowlist('b@school.org');
+    await assertSucceeds(getDoc(doc(student('s1'), 'classrooms', 'c1', 'battle', 'campaign')));
+    await assertSucceeds(getDoc(doc(teacherA(), 'classrooms', 'c1', 'battle', 'campaign')));
+    await assertFails(getDoc(doc(student('outsider'), 'classrooms', 'c1', 'battle', 'campaign')));
+    await assertFails(getDoc(doc(teacherB(), 'classrooms', 'c1', 'battle', 'campaign')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'classrooms', 'c1', 'battle', 'campaign')));
+  });
+
+  it('no client (student or teacher) can write the campaign, a player, or server-only documents', async () => {
+    await classroomWithStudent();
+    for (const db of [student('s1'), teacherA()]) {
+      await assertFails(setDoc(doc(db, 'classrooms', 'c1', 'battle', 'campaign'), { weekIndex: 1, castleHp: 1e9 }));
+      await assertFails(updateDoc(doc(db, 'classrooms', 'c1', 'battle', 'campaign'), { castleHp: 1e9 }));
+      await assertFails(updateDoc(doc(db, 'classrooms', 'c1', 'players', 's1'), { coins: 1e6 }));
+      await assertFails(setDoc(doc(db, 'classrooms', 'c1', 'players', 's1'), { uid: 's1', nickname: 'x', coins: 1e6, lifetimeCoins: 0, upgrades: { damage: 99, speed: 0, critChance: 0, critDamage: 0 } }));
+      await assertFails(getDoc(doc(db, 'classrooms', 'c1', 'serverOnly', 'secrets')));
+      await assertFails(setDoc(doc(db, 'classrooms', 'c1', 'serverOnly', 'secrets'), { questionSalt: 'mine' }));
+      await assertFails(getDoc(doc(db, 'serverOnly', 'devClock')));
+      await assertFails(setDoc(doc(db, 'serverOnly', 'devClock'), { mode: 'fixed', value: 0 }));
+    }
+  });
+
+  it("a student can read only their own player document (answers and attempts live there), not a classmate's", async () => {
+    await classroomWithStudent();
+    await requestJoin(student('s2'), 's2', 'c1', 'ABCD2345', 'pending', 'Moon Cat');
+    await approve(teacherA(), 'tA', 'c1', 's2', 'Moon Cat');
+    await assertSucceeds(getDoc(doc(student('s1'), 'classrooms', 'c1', 'players', 's1')));
+    await assertFails(getDoc(doc(student('s1'), 'classrooms', 'c1', 'players', 's2')));
+  });
+});

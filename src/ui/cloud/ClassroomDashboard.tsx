@@ -5,9 +5,12 @@ import { practiceStorageKey } from '../../cloud/mode';
 import { GRADE_LEVELS, formatJoinCode, validateClassroomInput } from '../../cloud/validation';
 import { Card } from '../components';
 import GameWorkspace from '../GameWorkspace';
+import ClockPanel from './ClockPanel';
+import { SharedReport } from './SharedBattle';
+import { useMultiplayer } from './useMultiplayer';
 import { useAction } from './useAsync';
 
-type Tab = 'roster' | 'settings' | 'preview';
+type Tab = 'roster' | 'report' | 'settings' | 'preview';
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 interface Props {
@@ -31,6 +34,7 @@ export default function ClassroomDashboard({ cloud, classroom, onUpdated, onBack
           {(
             [
               ['roster', 'Roster & join code'],
+              ['report', 'Battle Report (live)'],
               ['settings', 'Settings'],
               ['preview', 'Demo gameplay'],
             ] as [Tab, string][]
@@ -42,12 +46,13 @@ export default function ClassroomDashboard({ cloud, classroom, onUpdated, onBack
         </nav>
       </Card>
       {tab === 'roster' && <Roster cloud={cloud} classroom={classroom} onUpdated={onUpdated} />}
+      {tab === 'report' && <LiveReport cloud={cloud} classroom={classroom} />}
       {tab === 'settings' && <SettingsForm cloud={cloud} classroom={classroom} onUpdated={onUpdated} />}
       {tab === 'preview' && (
         <>
           <p className="notice">
             Demo gameplay uses a <strong>simulated</strong> class on this device, seeded with this classroom's settings. It is not connected to your
-            students: shared combat, coins and upgrades are not live yet.
+            students. Your real students' shared battle is in the <strong>Battle Report (live)</strong> tab.
           </p>
           <GameWorkspace
             surface="teacher-preview"
@@ -222,5 +227,20 @@ function SettingsForm({ cloud, classroom, onUpdated }: { cloud: Cloud; classroom
       </div>
       <p className="muted small">Archived classrooms stop accepting new students. Nothing is deleted.</p>
     </Card>
+  );
+}
+
+/** The teacher's Battle Report in Firebase mode: reads the shared campaign the server maintains, never the local demo state. */
+function LiveReport({ cloud, classroom }: { cloud: Cloud; classroom: Classroom }) {
+  const mp = useMultiplayer(cloud, classroom, 'teacher');
+  const c = mp.projection?.state ?? null;
+  return (
+    <div className="stack">
+      {mp.error && <p className="error" role="alert">{mp.error}</p>}
+      {!c && !mp.error && <p className="muted">Loading the shared battle…</p>}
+      {c && <SharedReport c={c} now={mp.now} className={classroom.name} settings={classroom.settings} />}
+      <div className="row"><button onClick={() => void mp.sync()}>Refresh now</button></div>
+      <ClockPanel cloud={cloud} onChanged={mp.sync} />
+    </div>
   );
 }

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Classroom, Cloud, CloudUser, MyClassroom, PlayerRecord } from '../../cloud/types';
-import { practiceStorageKey } from '../../cloud/mode';
 import { Card } from '../components';
-import GameWorkspace from '../GameWorkspace';
+import MultiplayerStudent from './MultiplayerStudent';
 import { useAction } from './useAsync';
 
 export default function StudentFlow({ cloud, user }: { cloud: Cloud; user: CloudUser | null }) {
@@ -29,7 +28,7 @@ export default function StudentFlow({ cloud, user }: { cloud: Cloud; user: Cloud
     });
 
   if (open && user) {
-    return <ClassroomHome cloud={cloud} user={user} entry={open} onBack={() => { setOpen(null); refresh(); }} />;
+    return <ClassroomHome cloud={cloud} entry={open} onBack={() => { setOpen(null); refresh(); }} />;
   }
 
   return (
@@ -70,7 +69,7 @@ export default function StudentFlow({ cloud, user }: { cloud: Cloud; user: Cloud
   );
 }
 
-function ClassroomHome({ cloud, user, entry, onBack }: { cloud: Cloud; user: CloudUser; entry: MyClassroom; onBack: () => void }) {
+function ClassroomHome({ cloud, entry, onBack }: { cloud: Cloud; entry: MyClassroom; onBack: () => void }) {
   const { busy, error, run } = useAction();
   const [classroom, setClassroom] = useState<Classroom | null>(null);
   const [player, setPlayer] = useState<PlayerRecord | null>(null);
@@ -114,18 +113,8 @@ function ClassroomHome({ cloud, user, entry, onBack }: { cloud: Cloud; user: Clo
           <button onClick={onBack}>← Back</button>
           <span>Playing as <strong>{player?.nickname ?? '…'}</strong></span>
         </div>
-        <p className="notice">
-          Classroom membership is saved to your account. Coins, upgrades and the boss fight below are <strong>practice only</strong>: they run on this
-          device and are not shared with your class yet.
-        </p>
       </Card>
-      <GameWorkspace
-        surface="student-practice"
-        embedded
-        badge="Practice · not shared with class"
-        storageKey={practiceStorageKey(user.uid, classroom.id)}
-        settings={classroom.settings}
-      />
+      <MultiplayerStudent cloud={cloud} classroom={classroom} />
     </div>
   );
 }
