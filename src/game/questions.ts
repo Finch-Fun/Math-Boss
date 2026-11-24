@@ -259,7 +259,11 @@ export interface BonusQuestion {
   explanation: string;
 }
 
-export const BONUS_BANK: BonusQuestion[] = [
+/**
+ * DEMO MODE ONLY. This bank is public (it ships in the app and in the repository) and is never used by the multiplayer server,
+ * which reads its own private bank (functions/src/core/bonusBank.ts). Do not reuse these questions for a real classroom.
+ */
+export const DEMO_BONUS_BANK: BonusQuestion[] = [
   {
     id: 'b1',
     prompt: 'A bakery packs 12 muffins in each box. It sells 7 boxes in the morning and 5 boxes in the afternoon. How many muffins were sold?',
@@ -326,5 +330,5 @@ export const BONUS_BANK: BonusQuestion[] = [
 ];
 
 export function bonusQuestionsForWeek(weekIndex: number): BonusQuestion[] {
-  return Array.from({ length: BONUS_PER_WEEK }, (_, i) => BONUS_BANK[(weekIndex * BONUS_PER_WEEK + i) % BONUS_BANK.length]);
+  return Array.from({ length: BONUS_PER_WEEK }, (_, i) => DEMO_BONUS_BANK[(weekIndex * BONUS_PER_WEEK + i) % DEMO_BONUS_BANK.length]);
 }

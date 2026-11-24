@@ -182,6 +182,12 @@ export function changeStudentDps(c: CampaignState, from: number, to: number, act
   if (activating) startAttackClock(c, at);
 }
 
+/** A student leaves the class (removed or un-approved): stop counting their DPS. Settle to the removal time first. */
+export function removeStudentDps(c: CampaignState, dps: number): void {
+  c.dpsSum = Math.max(0, roundDps(c.dpsSum - dps));
+  c.activatedCount = Math.max(0, c.activatedCount - 1);
+}
+
 const roundDps = (n: number): number => Math.round(n * 1e9) / 1e9;
 
 // ---------- settlement ----------

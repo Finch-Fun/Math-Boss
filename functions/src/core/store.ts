@@ -6,7 +6,7 @@ export interface Tx {
   get<T = Doc>(path: string): Promise<T | undefined>;
   getMany<T = Doc>(paths: string[]): Promise<(T | undefined)[]>;
   /** Documents of a collection, optionally filtered by one equality. Returns [id, data]. */
-  list<T = Doc>(collectionPath: string, where?: { field: string; equals: unknown }): Promise<[string, T][]>;
+  list<T = Doc>(collectionPath: string, where?: { field: string; equals: unknown }, limit?: number): Promise<[string, T][]>;
   /** Buffered: applied atomically when the transaction commits. Service code reads first, then writes. */
   set(path: string, data: Doc): void;
 }
@@ -61,12 +61,13 @@ export class MemoryStore implements DocStore {
           await tick();
           return paths.map((p) => readOne<D>(p));
         },
-        list: async <D,>(col: string, where?: { field: string; equals: unknown }) => {
+        list: async <D,>(col: string, where?: { field: string; equals: unknown }, limit?: number) => {
           await tick();
           const out: [string, D][] = [];
           for (const [path, d] of this.docs) {
             if (!path.startsWith(col + '/') || path.slice(col.length + 1).includes('/')) continue;
             if (where && d.data[where.field] !== where.equals) continue;
+            if (limit !== undefined && out.length >= limit) break;
             if (!seen.has(path)) seen.set(path, d.version);
             this.reads += 1;
             out.push([path.slice(col.length + 1), structuredClone(d.data) as D]);

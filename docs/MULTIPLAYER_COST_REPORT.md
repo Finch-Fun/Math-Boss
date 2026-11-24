@@ -90,3 +90,13 @@ extra defence before real deployment.
 There is **no scheduled function** and no recurring billable job. If nobody opens the app, Firestore is not updated; the missed time is
 settled exactly on the next trusted request (including a teacher opening the Battle Report). Strict real-time progression of an unattended
 campaign would require a scheduled function (Blaze plus a Cloud Scheduler job); this PR deliberately does not add one.
+
+## Production-readiness additions
+
+* Function options (`functions/src/config.ts`): `maxInstances` 5, `minInstances` 0, 256MiB, 15s timeout, one region, CORS limited to
+  `MATHBOSS_ALLOWED_ORIGINS`. There is no scheduled or trigger function, so nothing bills while idle. Blaze has no hard spending cap: set
+  budget alerts in Google Cloud.
+* Listener fan-out is the dominant read cost (one read per listener per campaign write). Pure time advances are no longer written, hidden
+  tabs detach their listeners after 2 minutes, and listener dependencies are stable, which removes most redundant reads.
+* The bonus bank costs at most one extra read per instance per 10 minutes (cached; a failed load is cached 60s).
+* Roster reads are bounded at 200 students.

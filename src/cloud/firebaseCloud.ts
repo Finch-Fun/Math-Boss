@@ -27,6 +27,7 @@ import {
 } from 'firebase/firestore';
 import { connectFunctionsEmulator, getFunctions, httpsCallable } from 'firebase/functions';
 import { readFirebaseConfig, type Env } from './config';
+import { functionsPlan } from './functionsConfig';
 import { FUNCTION_NAMES, type GameApi, type PlayerDoc } from './multiplayerTypes';
 import type { CampaignState } from '../game/campaign';
 import { CloudError, toCloudError } from './errors';
@@ -40,6 +41,7 @@ export function createCloud(env: Env): Cloud {
   const cfg = readFirebaseConfig(env);
   if (!cfg.ok) throw new CloudError('config_missing', `Firebase is not configured. Missing: ${cfg.missing.join(', ')}. See docs/FIREBASE_SETUP.md.`);
 
+  const fnPlan = functionsPlan(cfg.useEmulator, env);
   const app: FirebaseApp = getApps().length ? getApp() : initializeApp(cfg.config);
   const auth = getAuth(app);
   const db: Firestore = getFirestore(app);
@@ -47,7 +49,7 @@ export function createCloud(env: Env): Cloud {
     (globalThis as { __mbEmu?: boolean }).__mbEmu = true;
     connectAuthEmulator(auth, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(db, '127.0.0.1', 8080);
-    connectFunctionsEmulator(getFunctions(app, 'us-central1'), '127.0.0.1', 5001);
+    if (fnPlan.emulator) connectFunctionsEmulator(getFunctions(app, fnPlan.region), fnPlan.emulator.host, fnPlan.emulator.port);
   }
 
   const uid = (): string => {
@@ -191,6 +193,13 @@ export function createCloud(env: Env): Cloud {
 
     setMemberStatus: (classroomId, member: Member, status) =>
       wrap(async () => {
+        if (status === 'removed' && member.status === 'active') {
+          // An active student leaves through the trusted function: it settles combat to the server time and stops their damage.
+          // (The Firestore rules refuse a direct write for this on purpose.)
+          const r = await call<{ ok: boolean; reason?: string }>(FUNCTION_NAMES.removeStudent, { classroomId, studentId: member.uid });
+          if (!r.ok) throw new CloudError('unknown', r.reason ?? 'Could not remove the student.');
+          return;
+        }
         const batch = writeBatch(db);
         batch.update(memberRef(classroomId, member.uid), { status, approvedAt: serverTimestamp(), approvedBy: uid() });
         if (status === 'active') {
@@ -278,7 +287,7 @@ export function createCloud(env: Env): Cloud {
   };
 
   // ---- trusted game service (Cloud Functions). The browser sends intents only; every number it gets back is the server's.
-  const functions = getFunctions(app, 'us-central1');
+  const functions = getFunctions(app, fnPlan.region);
   const call = async <T,>(name: string, data: object): Promise<T> => {
     const attempt = async () => (await httpsCallable(functions, name)(data)).data as T;
     try {

@@ -6,6 +6,7 @@ import type { ProjectKey, SkillKey, QuestionDifficulty, UpgradeKey, Upgrades } f
 
 export const FUNCTION_NAMES = {
   sync: 'mbSync',
+  removeStudent: 'mbRemoveStudent',
   getDaily: 'mbGetDaily',
   submitDaily: 'mbSubmitDaily',
   getBonus: 'mbGetBonus',
@@ -97,6 +98,8 @@ export type Ok<T> = { ok: true; replayed?: boolean } & T;
 export type Reply<T> = Ok<T> | Fail;
 
 export interface SyncReq { classroomId: string }
+export interface RemoveStudentReq extends SyncReq { studentId: string }
+export type RemoveStudentReply = Reply<{ removed: boolean; wasContributing: boolean; effectiveAt: number }>;
 export interface DailyReq extends SyncReq { requestId: string }
 export interface SubmitDailyReq extends SyncReq { requestId: string; index: number; answer: string }
 export interface SubmitBonusReq extends SyncReq { requestId: string; index: number; choice: number }

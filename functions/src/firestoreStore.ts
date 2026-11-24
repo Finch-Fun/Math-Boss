@@ -20,9 +20,10 @@ export class FirestoreStore implements DocStore {
           const snaps = await t.getAll(...paths.map((p) => this.db.doc(p)));
           return snaps.map((s) => (s.exists ? (s.data() as D) : undefined));
         },
-        list: async <D,>(col: string, where?: { field: string; equals: unknown }) => {
+        list: async <D,>(col: string, where?: { field: string; equals: unknown }, limit?: number) => {
           let q: FirebaseFirestore.Query = this.db.collection(col);
           if (where) q = q.where(where.field, '==', where.equals);
+          if (limit !== undefined) q = q.limit(limit);
           const snap = await t.get(q);
           return snap.docs.map((d) => [d.id, d.data() as D] as [string, D]);
         },

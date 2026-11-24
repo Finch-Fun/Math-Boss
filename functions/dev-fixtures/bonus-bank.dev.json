@@ -1,0 +1,114 @@
+{
+  "devOnly": true,
+  "note": "Fake questions for emulator and unit tests ONLY. The real bank is private and is never committed.",
+  "questions": [
+    {
+      "id": "dev1",
+      "prompt": "[DEV FIXTURE 1] What is 4 \u00d7 5?",
+      "choices": [
+        "18",
+        "20",
+        "23",
+        "30"
+      ],
+      "correct": 1,
+      "explanation": "4 \u00d7 5 = 20. (Dev fixture only.)"
+    },
+    {
+      "id": "dev2",
+      "prompt": "[DEV FIXTURE 2] What is 5 \u00d7 6?",
+      "choices": [
+        "28",
+        "30",
+        "33",
+        "40"
+      ],
+      "correct": 1,
+      "explanation": "5 \u00d7 6 = 30. (Dev fixture only.)"
+    },
+    {
+      "id": "dev3",
+      "prompt": "[DEV FIXTURE 3] What is 6 \u00d7 7?",
+      "choices": [
+        "40",
+        "42",
+        "45",
+        "52"
+      ],
+      "correct": 1,
+      "explanation": "6 \u00d7 7 = 42. (Dev fixture only.)"
+    },
+    {
+      "id": "dev4",
+      "prompt": "[DEV FIXTURE 4] What is 7 \u00d7 8?",
+      "choices": [
+        "54",
+        "56",
+        "59",
+        "66"
+      ],
+      "correct": 1,
+      "explanation": "7 \u00d7 8 = 56. (Dev fixture only.)"
+    },
+    {
+      "id": "dev5",
+      "prompt": "[DEV FIXTURE 5] What is 8 \u00d7 9?",
+      "choices": [
+        "70",
+        "72",
+        "75",
+        "82"
+      ],
+      "correct": 1,
+      "explanation": "8 \u00d7 9 = 72. (Dev fixture only.)"
+    },
+    {
+      "id": "dev6",
+      "prompt": "[DEV FIXTURE 6] What is 9 \u00d7 10?",
+      "choices": [
+        "88",
+        "90",
+        "93",
+        "100"
+      ],
+      "correct": 1,
+      "explanation": "9 \u00d7 10 = 90. (Dev fixture only.)"
+    },
+    {
+      "id": "dev7",
+      "prompt": "[DEV FIXTURE 7] What is 10 \u00d7 11?",
+      "choices": [
+        "108",
+        "110",
+        "113",
+        "120"
+      ],
+      "correct": 1,
+      "explanation": "10 \u00d7 11 = 110. (Dev fixture only.)"
+    },
+    {
+      "id": "dev8",
+      "prompt": "[DEV FIXTURE 8] What is 11 \u00d7 12?",
+      "choices": [
+        "130",
+        "132",
+        "135",
+        "142"
+      ],
+      "correct": 1,
+      "explanation": "11 \u00d7 12 = 132. (Dev fixture only.)"
+    },
+    {
+      "id": "dev9",
+      "prompt": "[DEV FIXTURE 9] What is 12 \u00d7 13?",
+      "choices": [
+        "154",
+        "156",
+        "159",
+        "166"
+      ],
+      "correct": 1,
+      "explanation": "12 \u00d7 13 = 156. (Dev fixture only.)"
+    }
+  ]
+}

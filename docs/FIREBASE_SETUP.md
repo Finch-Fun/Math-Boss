@@ -111,3 +111,16 @@ Will need more than client-only code (multiplayer milestone):
 
 * **Authoritative coins, upgrades, answer checking, boss and castle damage.** The rules above guarantee clients cannot write these, so someone trusted has to. Today the questions and answers are generated in the browser, so a determined student could cheat in any client-side design. Options: (a) Cloud Functions, which require the **Blaze** plan (pay-as-you-go with a free allowance; you can set a budget alert); (b) a small server elsewhere that holds Admin SDK credentials; (c) for a first pilot, accept an honor system and have the teacher confirm progress. None of these is built or enabled here.
 * **Rate limiting join-code guesses and student account recovery** also benefit from a backend (or App Check at minimum).
+
+## Production deployment prerequisites (multiplayer)
+
+Nothing here is done by the repository; run each step yourself. Do not deploy until all are checked.
+
+1. Firebase project on Blaze, with a Google Cloud budget alert (Blaze has no hard cap). Enable Authentication providers Google and Anonymous, and add your hosting domain to authorized domains.
+2. Create teacher allowlist docs `teacherAllowlist/{lowercased email}` (Admin console or Admin SDK).
+3. Prepare the real bonus bank as a JSON file kept OUT of git (`*.private.json` is ignored), shape `{ "questions": [{ "id", "prompt", "choices", "correct", "explanation" }] }`, at least 3 questions. Do not reuse the old public demo questions.
+4. Seed it with your own credentials (`gcloud auth application-default login`): `npm run seed:bonus -- ./bank.private.json --project <PROJECT_ID> --live`.
+5. Set the Functions region and origins in `functions/.env`: `MATHBOSS_FUNCTIONS_REGION=<region>` (default us-central1) and `MATHBOSS_ALLOWED_ORIGINS=https://<your-hosting-domain>`. Build the web app with the matching `VITE_FUNCTIONS_REGION` and the `VITE_FIREBASE_*` values, and with `VITE_USE_FIREBASE_EMULATOR` unset or false.
+6. Make sure `MATHBOSS_ENABLE_TEST_CLOCK` and `FUNCTIONS_EMULATOR` are not set in the production environment.
+7. `npm --prefix functions install`, `npm run build:functions`, then deploy `firestore:rules`, `firestore:indexes` and `functions` (rules and Functions must ship together because removal now requires `mbRemoveStudent`).
+8. Smoke test on a throwaway classroom: join, approve, answer, bonus (confirm answers appear only after answering), remove an active student and confirm the damage stops. Consider enabling App Check.

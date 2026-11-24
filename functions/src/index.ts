@@ -7,15 +7,18 @@ import { HttpsError, onCall, type CallableRequest } from 'firebase-functions/v2/
 import { clockFor, controlDevClock, devClockEnabled, type DevClockCommand } from './core/clock';
 import { ServiceError } from './core/errors';
 import { GameService, type Caller } from './core/service';
+import { functionOptions } from './config';
+import { cachedBonusBank } from './core/bonusBank';
+import { firestoreBonusBank } from './firestoreBonusBank';
 import { FirestoreStore } from './firestoreStore';
 
 initializeApp();
 const store = new FirestoreStore(getFirestore());
 const env = process.env;
-const service = new GameService({ store, clock: clockFor(env) });
+const service = new GameService({ store, clock: clockFor(env), bonusBank: cachedBonusBank(firestoreBonusBank(getFirestore())) });
 
-// Region and limits are deliberately conservative. No scheduled functions are defined anywhere in this package.
-const opts = { region: 'us-central1', maxInstances: 10, cors: true } as const;
+// Region, instance cap, memory and timeout come from ./config (see the cost notes there). No scheduled functions exist in this package.
+const opts = functionOptions(env);
 
 function callerOf(req: CallableRequest<unknown>): Caller {
   if (!req.auth) throw new HttpsError('unauthenticated', 'Please sign in.');
@@ -40,6 +43,7 @@ export const mbSubmitDaily = onCall(opts, (req) => guard(() => service.submitDai
 export const mbGetBonus = onCall(opts, (req) => guard(() => service.getBonus(callerOf(req), req.data)));
 export const mbSubmitBonus = onCall(opts, (req) => guard(() => service.submitBonus(callerOf(req), req.data)));
 export const mbPurchaseUpgrade = onCall(opts, (req) => guard(() => service.purchaseUpgrade(callerOf(req), req.data)));
+export const mbRemoveStudent = onCall(opts, (req) => guard(() => service.removeStudent(callerOf(req), req.data)));
 export const mbDonate = onCall(opts, (req) => guard(() => service.donate(callerOf(req), req.data)));
 
 // Development-only test clock (callable name "mbDevClock"). It is defined only inside the emulator with an explicit opt-in, so a

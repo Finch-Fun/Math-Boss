@@ -150,9 +150,12 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'approvedAt', 'approvedBy'])
           && request.resource.data.status in ['active', 'removed']
           && request.resource.data.approvedBy == request.auth.uid
-          && request.resource.data.approvedAt == request.time;
+          && request.resource.data.approvedAt == request.time
+          // An ACTIVE student can only be taken out through the trusted removeStudent function, which first settles combat to the
+          // server time and stops their damage. A direct client write could leave their damage counting in the shared campaign.
+          && (request.resource.data.status == 'active' || resource.data.status != 'active');
 
-        allow delete: if isOwner(cid);
+        allow delete: if isOwner(cid) && resource.data.status != 'active';
       }
 
       // Persistent progression. Create-only with zero values; no client can ever update coins, upgrades or damage.

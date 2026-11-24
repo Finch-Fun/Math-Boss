@@ -18,12 +18,41 @@ export interface Multiplayer {
 }
 
 /**
+ * True while the tab is visible, plus a short grace period after it is hidden. A tab left open in the background must not keep a
+ * Firestore listener running: every campaign write is billed as one read per listening client, all day long.
+ */
+function useTabActive(graceMs = 120_000): boolean {
+  const [active, setActive] = useState(true);
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = () => {
+      if (timer) clearTimeout(timer);
+      if (document.visibilityState === 'visible') setActive(true);
+      else timer = setTimeout(() => setActive(false), graceMs);
+    };
+    document.addEventListener('visibilitychange', onChange);
+    onChange();
+    return () => {
+      document.removeEventListener('visibilitychange', onChange);
+      if (timer) clearTimeout(timer);
+    };
+  }, [graceMs]);
+  return active;
+}
+
+/**
  * Shared state (one listener on the classroom's campaign document) + scoped personal state (the student's own player document).
  * All numbers come from the server. The screen only projects them forward in time for smooth display and re-syncs when a
  * projection reaches an event that needs the server (new week or new boss).
  */
 export function useMultiplayer(cloud: Cloud, classroom: Classroom, role: 'student' | 'teacher'): Multiplayer {
-  const ctx = useMemo(() => ({ timeZone: classroom.timezone, settings: classroom.settings }), [classroom.timezone, classroom.settings]);
+  // Keyed by value, not object identity: a re-created classroom object with the same settings must not tear down and recreate the
+  // listeners (each re-subscription re-reads the documents).
+  const settingsKey = JSON.stringify(classroom.settings);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ctx = useMemo(() => ({ timeZone: classroom.timezone, settings: classroom.settings }), [classroom.timezone, settingsKey]);
+  const tabActive = useTabActive();
   const [campaign, setCampaign] = useState<CampaignState | null>(null);
   const [me, setMe] = useState<PlayerView | null>(null);
   const [error, setError] = useState('');
@@ -63,6 +92,7 @@ export function useMultiplayer(cloud: Cloud, classroom: Classroom, role: 'studen
   }, [cloud, classroom.id, apply]);
 
   useEffect(() => {
+    if (!tabActive) return; // listeners are detached while the tab sits in the background; they come back (with a sync) on return
     void sync();
     const offC = cloud.live.watchCampaign(classroom.id, takeCampaign, (e) => setError(e.message));
     const offP =
@@ -81,7 +111,7 @@ export function useMultiplayer(cloud: Cloud, classroom: Classroom, role: 'studen
       offP();
       clearInterval(timer);
     };
-  }, [cloud, classroom.id, role, ctx, sync, takeCampaign]);
+  }, [cloud, classroom.id, role, ctx, sync, takeCampaign, tabActive]);
 
   const projection = useMemo(() => (campaign ? projectCampaign(campaign, now, ctx) : null), [campaign, now, ctx]);
 

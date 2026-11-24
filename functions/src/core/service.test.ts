@@ -7,7 +7,9 @@ import { upgradeCost } from '../../../src/game/upgrades';
 import { weekEndZ } from '../../../src/game/zoned';
 import { controlDevClock, devClockEnabled, clockFor, systemClock, devClock } from './clock';
 import { ServiceError } from './errors';
+import { bonusForWeek } from './bonusBank';
 import { LIMITS } from './service';
+import { DEV_BANK } from './testBank';
 import { MON_9AM, SALT, TEACHER, setup } from './harness';
 import { MemoryStore } from './store';
 
@@ -37,10 +39,10 @@ describe('2/7. damage is shared and comes from server timing', () => {
     const r = setup({ students: 2 });
     const first = await r.correct('u1');
     assert.ok(first.ok);
-    const hp0 = r.campaign().boss!.hp;
+    const hp0 = r.stored().boss!.hp;
     const dps = personalDps(r.player('u1').upgrades);
     r.hours(10); // A is "offline" the whole time; nothing happens until someone makes a trusted request
-    assert.equal(r.campaign().boss!.hp, hp0, 'no write without a trusted request');
+    assert.equal(r.stored().boss!.hp, hp0, 'no write without a trusted request');
     const b = await r.svc.sync(r.as('u2'), { classroomId: 'c1' });
     assert.ok(b.ok);
     if (!b.ok) return;
@@ -143,13 +145,12 @@ describe('bonus questions', () => {
     assert.ok(list.ok && list.enabled && list.questions.length === 3);
     if (!list.ok) return;
     assert.ok(!JSON.stringify(list.questions).includes('"correctChoice"'), 'unanswered questions never reveal the answer');
-    const { bonusQuestionsForWeek } = await import('../../../src/game/questions');
-    const q0 = bonusQuestionsForWeek(1)[0];
+    const q0 = bonusForWeek(DEV_BANK, 1)[0];
     const right = await r.svc.submitBonus(r.as('u1'), { classroomId: 'c1', requestId: r.rid(), index: 0, choice: q0.correct });
     assert.ok(right.ok && right.correct && right.coins === 20);
     const retry = await r.svc.submitBonus(r.as('u1'), { classroomId: 'c1', requestId: r.rid(), index: 0, choice: q0.correct });
     assert.ok(!retry.ok && retry.code === 'locked');
-    const q1 = bonusQuestionsForWeek(1)[1];
+    const q1 = bonusForWeek(DEV_BANK, 1)[1];
     const wrong = await r.svc.submitBonus(r.as('u1'), { classroomId: 'c1', requestId: r.rid(), index: 1, choice: (q1.correct + 1) % q1.choices.length });
     assert.ok(wrong.ok && !wrong.correct && wrong.coins === 0);
     const retry2 = await r.svc.submitBonus(r.as('u1'), { classroomId: 'c1', requestId: r.rid(), index: 1, choice: q1.correct });
@@ -641,8 +642,8 @@ describe('15. cross-classroom isolation', () => {
     await rejects(r.svc.getDaily(r.as('v1'), { classroomId: 'c1', requestId: r.rid() }), 'permission-denied');
     await r.svc.sync(r.as('u2'), { classroomId: 'c1' });
     assert.ok(r.campaign('c1').boss!.hp < r.campaign('c1').boss!.maxHp);
-    assert.equal(r.campaign('c2').lastSettledAt, MON_9AM, 'c2 was not settled or touched by c1 activity');
-    assert.equal(r.campaign('c2').boss!.hp, r.campaign('c2').boss!.maxHp);
+    assert.equal(r.stored('c2').lastSettledAt, MON_9AM, 'c2 was not settled or touched by c1 activity');
+    assert.equal(r.stored('c2').boss!.hp, r.stored('c2').boss!.maxHp);
     assert.equal(r.store.peek('classrooms/c2/players/u1'), undefined);
     // another classroom's teacher cannot sync this classroom either
     r.store.seed('teacherAllowlist/other@school.org', {});
@@ -691,12 +692,12 @@ describe('injected test clock', () => {
     const { GameService } = await import('./service');
     const svc = new GameService({ store: r.store, clock: clockFor(env), newSalt: () => SALT });
     await controlDevClock(r.store, env, { action: 'set', ms: MON_9AM });
-    await svc.sync(r.as('u1'), { classroomId: 'c1' });
-    assert.equal(r.campaign().lastSettledAt, MON_9AM);
+    const s1 = await svc.sync(r.as('u1'), { classroomId: 'c1' });
+    assert.ok(s1.ok && s1.campaign.lastSettledAt === MON_9AM);
     const t = await controlDevClock(r.store, env, { action: 'advance', ms: 26 * HOUR });
     assert.equal(t.now, MON_9AM + 26 * HOUR);
-    await svc.sync(r.as('u1'), { classroomId: 'c1' });
-    assert.equal(r.campaign().lastSettledAt, MON_9AM + 26 * HOUR);
+    const s2 = await svc.sync(r.as('u1'), { classroomId: 'c1' });
+    assert.ok(s2.ok && s2.campaign.lastSettledAt === MON_9AM + 26 * HOUR);
   });
 
   it('production service ignores any dev-clock document', async () => {
