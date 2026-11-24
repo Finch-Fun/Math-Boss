@@ -2,6 +2,11 @@ rules_version = '2';
 
 // Math Boss Firestore rules (Milestone 1).
 //
+// PR #6 (multiplayer): the shared campaign (classrooms/{id}/battle/campaign) and every player document are written ONLY by the
+// trusted Cloud Functions (Admin SDK, which bypasses these rules). Nothing under battle/, players/ (after create) or serverOnly/
+// is client-writable. Students can read the shared campaign and their own player document; the owning teacher can read the
+// campaign (Battle Report) and the roster.
+//
 // Trust model
 //   * Teachers: Google sign-in + verified email that appears in /teacherAllowlist (managed only in the Firebase
 //     console / Admin SDK, no client can read or write it). There is NO client-editable role field anywhere.
@@ -171,11 +176,21 @@ service cloud.firestore {
         allow delete: if isOwner(cid);
       }
 
-      // Reserved for the multiplayer milestone: shared boss/castle state will be written by a trusted backend only.
+      // Shared campaign state (boss, castle, projects, weekly totals). Written by the trusted backend only. No per-student data.
       match /battle/{docId} {
         allow read: if isOwner(cid) || isActiveMember(cid);
         allow write: if false;
       }
+
+      // Server-only secrets (question salt). Not readable or writable by any client.
+      match /serverOnly/{docId} {
+        allow read, write: if false;
+      }
+    }
+
+    // Emulator test clock and other server-only data.
+    match /serverOnly/{docId} {
+      allow read, write: if false;
     }
 
     // ---------- join codes: look up by exact code, never list ----------

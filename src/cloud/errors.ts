@@ -29,6 +29,18 @@ export function toCloudError(e: unknown, fallback = 'Something went wrong. Pleas
     case 'unavailable':
     case 'auth/network-request-failed':
       return new CloudError('offline', 'Cannot reach Firebase. Check the internet connection (or that the emulators are running) and try again.');
+    case 'functions/unauthenticated':
+      return new CloudError('permission_denied', 'Please sign in again.');
+    case 'functions/permission-denied':
+      return new CloudError('permission_denied', 'You are not an active member of this classroom.');
+    case 'functions/resource-exhausted':
+      return new CloudError('invalid_input', 'Too many requests. Wait a few seconds and try again.');
+    case 'functions/not-found':
+    case 'functions/unavailable':
+      return new CloudError('offline', 'Cannot reach the game server. If you are testing locally, make sure the Functions emulator is running (npm run emulators).');
+    case 'functions/invalid-argument':
+    case 'functions/failed-precondition':
+      return new CloudError('invalid_input', e instanceof Error && e.message ? e.message : 'That request was not valid.');
     case 'auth/popup-closed-by-user':
     case 'auth/cancelled-popup-request':
       return new CloudError('popup_closed', 'Sign-in was cancelled.');

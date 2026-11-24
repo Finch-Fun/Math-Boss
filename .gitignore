@@ -12,3 +12,6 @@ firestore-debug.log
 ui-debug.log
 serviceAccount*.json
 *-service-account*.json
+!.env.emulator
+functions/lib/
+functions/node_modules/

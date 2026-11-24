@@ -10,17 +10,25 @@ import {
 import { bestUpgrade, dps, upgradeCost } from './upgrades';
 import type { Boss, GameState, Upgrades } from './types';
 
+/** The few fields boss calibration reads, so the trusted server can supply them without building a whole GameState. */
+export interface BossInputs {
+  now: number;
+  students: { upgrades: Upgrades; coins: number }[];
+  settings: Pick<GameState['settings'], 'dailyQuestions' | 'bossDifficulty'>;
+  history: { activatedFraction: number }[];
+}
+
 export const bossName = (number: number): string =>
   number <= BOSS_NAMES.length ? BOSS_NAMES[number - 1] : `${BOSS_NAMES[(number - 1) % BOSS_NAMES.length]} (Stage ${number})`;
 
 /** Coins a student is expected to put toward personal upgrades this week. */
-export function expectedWeeklyCoinsPerStudent(s: GameState): number {
+export function expectedWeeklyCoinsPerStudent(s: BossInputs): number {
   const questions = s.settings.dailyQuestions.reduce((a, b) => a + b, 0);
   return questions * EXPECTED_COINS_PER_QUESTION * PERSONAL_SPEND_SHARE;
 }
 
 /** Recent participation = average share of students activated over the last four weeks. */
-export function expectedParticipation(s: GameState): number {
+export function expectedParticipation(s: BossInputs): number {
   const recent = s.history.slice(0, 4);
   if (!recent.length) return DEFAULT_EXPECTED_PARTICIPATION;
   const avg = recent.reduce((sum, w) => sum + w.activatedFraction, 0) / recent.length;
@@ -44,7 +52,7 @@ export function projectedDps(u: Upgrades, budget: number): number {
  * Expected class DPS: each student's DPS averaged between "now" and the end of the week after spending
  * their expected earnings, scaled by recent participation. Larger classes get proportionally larger bosses.
  */
-export function expectedClassDps(s: GameState): number {
+export function expectedClassDps(s: BossInputs): number {
   const budget = expectedWeeklyCoinsPerStudent(s);
   let total = 0;
   for (const st of s.students) {
@@ -54,7 +62,7 @@ export function expectedClassDps(s: GameState): number {
 }
 
 /** Boss HP = Expected Class DPS x Target Combat Seconds x Difficulty Modifier x stage multiplier. Fixed at spawn. */
-export function bossMaxHp(s: GameState, number: number): number {
+export function bossMaxHp(s: BossInputs, number: number): number {
   return Math.round(
     expectedClassDps(s) * (TUNING.bossTargetHours * 3600) * BOSS_DIFFICULTY_MOD[s.settings.bossDifficulty] * TUNING.bossHpGrowth ** (number - 1),
   );
@@ -66,7 +74,7 @@ export function bossAttackPerHour(studentCount: number, number: number): number 
   return Math.round(base * TUNING.bossAttackGrowth ** (number - 1) * 100) / 100;
 }
 
-export function spawnBoss(s: GameState, number: number): Boss {
+export function spawnBoss(s: BossInputs, number: number): Boss {
   const maxHp = bossMaxHp(s, number);
   return {
     number,

@@ -49,3 +49,8 @@ With Firebase settings in `.env.local`, the app offers teacher sign-in, classroo
 ## Not built yet
 
 Shared multiplayer combat and authoritative coins/upgrades (needs a trusted backend), teacher-created questions, skill-level reports, school leaderboards, and a full question bank.
+
+## Multiplayer (PR #6)
+
+Firebase classrooms now run a shared server-authoritative campaign. See [`docs/MULTIPLAYER.md`](docs/MULTIPLAYER.md) (architecture and local emulator
+commands) and [`docs/MULTIPLAYER_COST_REPORT.md`](docs/MULTIPLAYER_COST_REPORT.md) (estimated Firebase usage). Demo mode is unchanged and local only.

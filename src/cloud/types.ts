@@ -1,6 +1,8 @@
 // Types and service interfaces for the Firebase classroom layer. No Firebase imports here: the UI and tests
 // depend on these interfaces, and only src/cloud/firebaseCloud.ts talks to the SDK.
+import type { CampaignState } from '../game/campaign';
 import type { Settings } from '../game/types';
+import type { GameApi, PlayerDoc } from './multiplayerTypes';
 
 export type GradeLevel = 'K' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | '10' | '11' | '12' | 'Mixed';
 export type JoinApproval = 'teacher' | 'auto';
@@ -98,8 +100,27 @@ export interface StudentService {
   getMyPlayer(classroomId: string): Promise<PlayerRecord | null>;
 }
 
+/** Realtime views. Shared state has one listener per classroom; personal state is a separate, scoped listener. */
+export interface LiveService {
+  /** classrooms/{id}/battle/campaign: readable by the classroom's active members and its owning teacher. */
+  watchCampaign(classroomId: string, onData: (c: CampaignState | null) => void, onError: (e: Error) => void): () => void;
+  /** classrooms/{id}/players/{myUid}: only the student's own document. */
+  watchMyPlayer(classroomId: string, onData: (p: PlayerDoc | null) => void, onError: (e: Error) => void): () => void;
+}
+
+/** Emulator-only controls for the injected test clock. Exists only when the app is pointed at the emulators. */
+export interface DevClockControl {
+  set(ms: number): Promise<number>;
+  advance(ms: number): Promise<number>;
+  reset(): Promise<number>;
+}
+
 export interface Cloud {
   auth: AuthService;
   teacher: TeacherService;
   student: StudentService;
+  /** The trusted game service (Cloud Functions). Intents in, authoritative results out. */
+  game: GameApi;
+  live: LiveService;
+  devClock?: DevClockControl;
 }
