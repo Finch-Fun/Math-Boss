@@ -8,8 +8,10 @@ import { setup } from './harness';
 import { DEV_BANK, DEV_FIXTURE_PATH } from './testBank';
 import { GameService } from './service';
 import { MemoryStore } from './store';
+import { relPosix, toPosix } from '../../../src/testSupport/paths';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
+const rel = (p: string) => relPosix(ROOT, p);
 const walk = (dir: string, out: string[] = []): string[] => {
   for (const f of readdirSync(dir)) {
     if (f === 'node_modules' || f === 'lib' || f === '.git') continue;
@@ -93,20 +95,20 @@ describe('private Bonus Question bank (server-side only)', () => {
   });
 
   it('the real bank is not in the repository, and the browser code cannot reach any bank or answer', () => {
-    const files = walk(ROOT).filter((f) => /\.(ts|tsx|mjs|json)$/.test(f) && !f.includes('/docs/'));
+    const files = walk(ROOT).filter((f) => /\.(ts|tsx|mjs|json)$/.test(f) && !rel(f).startsWith('docs/'));
     const fixture = fileURLToPath(DEV_FIXTURE_PATH);
     // 1. Server code never reads the public demo bank.
     const server = readFileSync(join(ROOT, 'functions/src/core/service.ts'), 'utf8');
     assert.ok(!/DEMO_BONUS_BANK|bonusQuestionsForWeek/.test(server));
     // 2. The browser source never imports from the Functions package (where answers are handled).
-    for (const f of files.filter((p) => p.includes('/src/') && !p.includes('/functions/') && !/\.test\.ts$/.test(p))) {
+    for (const f of files.filter((p) => rel(p).startsWith('src/') && !/\.test\.ts$/.test(p))) {
       const text = readFileSync(f, 'utf8');
       assert.ok(!/from ['"][./]*functions\//.test(text), `${f} imports from functions/`);
     }
     // 3. No file other than the dev fixture contains a question bank with answer keys (apart from the public demo bank).
-    const withKeys = files.filter((f) => f !== fixture && /"correct"\s*:\s*\d|\bcorrect:\s*\d/.test(readFileSync(f, 'utf8')));
+    const withKeys = files.filter((f) => toPosix(f) !== toPosix(fixture) && /"correct"\s*:\s*\d|\bcorrect:\s*\d/.test(readFileSync(f, 'utf8')));
     assert.deepEqual(
-      withKeys.map((f) => f.replace(ROOT, '')).filter((f) => !/\.test\.ts$/.test(f)),
+      withKeys.map(rel).filter((f) => !/\.test\.ts$/.test(f)),
       ['src/game/questions.ts'],
       'only the public demo bank may carry answer keys in source',
     );
