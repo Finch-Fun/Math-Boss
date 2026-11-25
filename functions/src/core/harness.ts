@@ -1,12 +1,14 @@
 // Test harness: an in-memory classroom with a controllable clock. Used by the unit and "integration" tests (the trusted
 // service runs for real; only the Firestore adapter is swapped for MemoryStore).
 import { HOUR } from '../../../src/game/constants';
-import type { CampaignState } from '../../../src/game/campaign';
+import { settleCampaign, type CampaignState, type RosterEntry } from '../../../src/game/campaign';
 import { generateDailyQuestion } from '../../../src/game/questions';
 import { defaultSettings } from '../../../src/game/sample';
 import type { Settings } from '../../../src/game/types';
 import type { PlayerDoc } from '../../../src/cloud/multiplayerTypes';
-import { GameService, type Caller } from './service';
+import { staticBonusBank } from './bonusBank';
+import { GameService, normalizeSettings, type Caller } from './service';
+import { DEV_BANK } from './testBank';
 import { MemoryStore } from './store';
 
 export const SALT = 'testsalt';
@@ -23,6 +25,8 @@ export interface Room {
   as: (uid: string) => Caller;
   rid: () => string;
   campaign: (cid?: string) => CampaignState;
+  /** The campaign document exactly as stored (lazily persisted: it can lag behind `campaign()` until something discrete happens). */
+  stored: (cid?: string) => CampaignState;
   player: (uid: string, cid?: string) => PlayerDoc;
   patchCampaign: (fn: (c: CampaignState) => void, cid?: string) => void;
   /** The correct (or deliberately wrong) answer for the student's current Daily Review question. */
@@ -36,7 +40,7 @@ export function setup(opts: { students?: number; tz?: string; settings?: Partial
   const store = new MemoryStore();
   const clock = { now: opts.start ?? MON_9AM };
   let counter = 0;
-  const svc = new GameService({ store, clock: async () => clock.now, newSalt: () => SALT });
+  const svc = new GameService({ store, clock: async () => clock.now, newSalt: () => SALT, bonusBank: staticBonusBank(DEV_BANK) });
   const n = opts.students ?? 3;
   const uids = Array.from({ length: n }, (_, i) => `u${i + 1}`);
   const room: Room = {
@@ -47,7 +51,23 @@ export function setup(opts: { students?: number; tz?: string; settings?: Partial
     uids,
     as: (uid) => ({ uid, provider: 'anonymous' }),
     rid: () => `req-${String(++counter).padStart(6, '0')}`,
-    campaign: (cid = 'c1') => store.peek<CampaignState>(`classrooms/${cid}/battle/campaign`)!,
+    stored: (cid = 'c1') => store.peek<CampaignState>(`classrooms/${cid}/battle/campaign`)!,
+    // The stored campaign is only persisted when something discrete happens; the settled view at "now" is recomputed
+    // deterministically from it, exactly as the server (and the browser projection) does.
+    campaign: (cid = 'c1') => {
+      const c = store.peek<CampaignState>(`classrooms/${cid}/battle/campaign`)!;
+      const cls = store.peek<{ timezone: string; settings: unknown }>(`classrooms/${cid}`)!;
+      const roster: RosterEntry[] = store
+        .paths(`classrooms/${cid}/members/`)
+        .map((path) => store.peek<{ uid: string; status: string }>(path)!)
+        .filter((m) => m.status === 'active')
+        .map((m) => {
+          const pl = store.peek<PlayerDoc>(`classrooms/${cid}/players/${m.uid}`);
+          return { uid: m.uid, upgrades: pl?.upgrades ?? { damage: 0, speed: 0, critChance: 0, critDamage: 0 }, coins: pl?.coins ?? 0 };
+        });
+      settleCampaign(c, clock.now, { timeZone: cls.timezone, settings: normalizeSettings(cls.settings) }, { roster });
+      return c;
+    },
     player: (uid, cid = 'c1') => store.peek<PlayerDoc>(`classrooms/${cid}/players/${uid}`)!,
     patchCampaign: (fn, cid = 'c1') => {
       const c = store.peek<CampaignState>(`classrooms/${cid}/battle/campaign`)!;

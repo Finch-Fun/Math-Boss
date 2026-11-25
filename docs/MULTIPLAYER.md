@@ -40,7 +40,7 @@ npm run test:integration   # real Auth + Firestore + Functions emulators, end to
   shared accumulator), timezone and DST-correct weeks.
 * `functions/src/core/service.ts`: the trusted service. One transaction per operation. `store.ts` is the storage abstraction
   (`functions/src/firestoreStore.ts` for Firestore, an in-memory store with optimistic concurrency for tests).
-* `functions/src/index.ts`: thin callable wrappers (`mbSync`, `mbGetDaily`, `mbSubmitDaily`, `mbGetBonus`, `mbSubmitBonus`, `mbPurchaseUpgrade`, `mbDonate`).
+* `functions/src/index.ts`: thin callable wrappers (`mbSync`, `mbGetDaily`, `mbSubmitDaily`, `mbGetBonus`, `mbSubmitBonus`, `mbPurchaseUpgrade`, `mbDonate`, `mbRemoveStudent`).
   Identity comes from the verified token, never the request body.
 * Client: `src/ui/cloud/MultiplayerStudent.tsx`, `SharedBattle.tsx`, `useMultiplayer.ts` (listeners and estimation), `src/cloud/liveState.ts` (pure helpers).
 
@@ -58,10 +58,22 @@ no client access).
   estimate between updates, but only server results are final.
 * **Questions.** Daily answers are checked on the server against questions generated with a secret per-classroom salt, so they cannot be derived
   from the public generator. Rewards are 10/5/2 once per question; wrong attempts are counted on the server. Bonus questions allow one attempt.
-  Limitation: the starter bonus bank is public source in this repo (the demo uses it). Move it to a private store before real classroom use.
+  **Bonus bank is private.** The repo is public, so the real bank is NOT in source. It lives in Firestore `serverOnly/bonusBank` (denied to every
+  client by the rules), is loaded by the Functions with the Admin SDK (cached 10 min) and is seeded by `npm run seed:bonus`. If it is missing
+  or invalid the Bonus Questions fail closed (disabled, nothing is paid). The browser only receives prompts and choices; `correct` and the
+  explanation are returned only after the student's single answer. Demo mode keeps its public `DEMO_BONUS_BANK`, which the server never uses.
+  `functions/dev-fixtures/bonus-bank.dev.json` is a fake, `devOnly` bank for tests and the emulator; it cannot be seeded into a live project.
+  Tests assert the browser bundle contains no bonus question text and that `src/` never imports from `functions/`.
 * **Weeks.** Monday 12:00 AM to the next Monday in the classroom timezone (167 or 169 hour weeks across DST). Weekly progress resets lazily;
   coins and upgrades persist.
-* **Limits and notes.** A removed student's already-counted DPS stays until the week ends. Project costs use the class size at week start.
+* **Removal.** Removing or rejecting an active student goes through the trusted `mbRemoveStudent` callable (owner teacher only). It settles the
+  class to the server time, folds the student's damage up to that instant, removes their DPS from the aggregate and then marks them removed, all
+  in one transaction, so damage stops at the effective removal time (including offline settlement and concurrent requests). Rules forbid
+  direct active-to-removed writes and deleting active members. Coins and upgrades are kept; restoring the student re-activates them next week.
+* **Reads.** Every write to the shared campaign document is delivered to every listening student. The service therefore writes it only on
+  discrete changes (activation, upgrade, donation, boss or week events); elapsed time alone is recomputed deterministically and not written.
+  Browser listeners detach after the tab has been hidden for 2 minutes and re-sync on return. Rosters are capped at 200 students.
+* **Limits and notes.** Project costs use the class size at week start.
   Per-student hit attribution is recovered from the accumulator rather than stored per hit.
 
 ## Verified and not verified

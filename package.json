@@ -15,7 +15,9 @@
     "build:functions": "node functions/build.mjs",
     "emulators:dev": "node scripts/emulators-dev.mjs",
     "test:integration": "node scripts/integration.mjs",
-    "dev:emulator": "vite --mode emulator"
+    "dev:emulator": "vite --mode emulator",
+    "seed:bonus": "node --import tsx scripts/seed-bonus-bank.ts",
+    "seed:bonus:emulator": "node --import tsx scripts/seed-bonus-bank.ts functions/dev-fixtures/bonus-bank.dev.json --emulator"
   },
   "dependencies": {
     "react": "^19.0.0",

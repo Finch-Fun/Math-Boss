@@ -17,6 +17,7 @@ import {
   newCampaign,
   personalDps,
   questionRepair,
+  removeStudentDps,
   settleCampaign,
   settlementNeedsRoster,
   type CampaignState,
@@ -24,7 +25,8 @@ import {
   type SettleContext,
 } from '../../../src/game/campaign';
 import { coinsForAttempts } from '../../../src/game/actions';
-import { bonusQuestionsForWeek, generateDailyQuestion, hintFor, parseAnswer, ALL_SKILLS } from '../../../src/game/questions';
+import { generateDailyQuestion, hintFor, parseAnswer, ALL_SKILLS } from '../../../src/game/questions';
+import { bonusForWeek, type BonusBankSource } from './bonusBank';
 import { defaultSettings } from '../../../src/game/sample';
 import { isMaxed, upgradeCost } from '../../../src/game/upgrades';
 import { weekdayIndexZ, isValidTimeZone } from '../../../src/game/zoned';
@@ -41,6 +43,8 @@ import type {
   PlayerView,
   PlayerWeek,
   PublicQuestion,
+  RemoveStudentReply,
+  RemoveStudentReq,
   StateReply,
   SubmitBonusReply,
   SubmitBonusReq,
@@ -68,6 +72,8 @@ export const LIMITS = {
   /** A read-style request settles combat only if at least this much time has passed (cuts writes; mutations always settle). */
   minSettleMs: 5_000,
   maxDonation: 1_000_000,
+  /** Upper bound on roster reads inside one transaction (a class is 10 to 40 students). */
+  maxRoster: 200,
 };
 
 const REQUEST_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -115,6 +121,12 @@ function exactKeys(req: unknown, allowed: string[]): Record<string, unknown> {
   return r;
 }
 
+/** Everything about the campaign except values that are pure functions of elapsed time (they are recomputed deterministically). */
+function campaignSignature(c: CampaignState): string {
+  const { lastSettledAt: _t, acc: _a, castleHp: _h, boss, ...rest } = c;
+  return JSON.stringify([rest, boss ? { ...boss, hp: 0 } : null]);
+}
+
 const fail = (code: string, reason: string, hint?: string): Fail => ({ ok: false, code, reason, ...(hint ? { hint } : {}) });
 
 interface Prep {
@@ -142,17 +154,21 @@ export interface ServiceOptions {
   clock: ClockSource;
   /** Overridable for deterministic tests. */
   newSalt?: () => string;
+  /** The private Bonus Question bank. Without one, Bonus Questions are unavailable (fail closed); there is no public fallback. */
+  bonusBank?: BonusBankSource;
 }
 
 export class GameService {
   private store: DocStore;
   private clock: ClockSource;
   private newSalt: () => string;
+  private bonusBank: BonusBankSource;
 
   constructor(opts: ServiceOptions) {
     this.store = opts.store;
     this.clock = opts.clock;
     this.newSalt = opts.newSalt ?? (() => randomBytes(16).toString('hex'));
+    this.bonusBank = opts.bonusBank ?? { load: async () => null };
   }
 
   // ------------------------------------------------------------------ public operations
@@ -202,10 +218,11 @@ export class GameService {
 
   async getBonus(caller: Caller, req: DailyReq): Promise<BonusListReply> {
     const r = exactKeys(req, ['classroomId', 'requestId']);
+    const bank = await this.bonusBank.load();
     return this.run(caller, r.classroomId as string, 'getBonus', { mutating: false, settle: 'lazy' }, (p) => {
-      if (!p.settings.bonusEnabled) return { ok: true, enabled: false, questions: [] };
+      if (!p.settings.bonusEnabled || !bank) return { ok: true, enabled: false, questions: [] };
       const week = p.player!.week!;
-      const questions = bonusQuestionsForWeek(p.campaign.weekIndex).map((q, index) => {
+      const questions = bonusForWeek(bank, p.campaign.weekIndex).map((q, index) => {
         const a = week.bonus[`${p.campaign.weekIndex}:${index}`];
         return {
           index,
@@ -221,10 +238,11 @@ export class GameService {
   async submitBonus(caller: Caller, req: SubmitBonusReq): Promise<SubmitBonusReply> {
     const r = exactKeys(req, ['classroomId', 'requestId', 'index', 'choice']);
     if (!Number.isInteger(r.index) || !Number.isInteger(r.choice)) throw new ServiceError('invalid-argument', 'Invalid choice.');
+    const bank = await this.bonusBank.load();
     return this.run(caller, r.classroomId as string, 'submitBonus', { mutating: true, requestId: r.requestId as string, settle: 'force' }, (p) => {
-      if (!p.settings.bonusEnabled) return fail('disabled', 'Bonus Questions are not available right now.');
+      if (!p.settings.bonusEnabled || !bank) return fail('disabled', 'Bonus Questions are not available right now.');
       const player = p.player!;
-      const question = bonusQuestionsForWeek(p.campaign.weekIndex)[r.index as number];
+      const question = bonusForWeek(bank, p.campaign.weekIndex)[r.index as number];
       if (!question) return fail('unknown', 'Unknown bonus question.');
       const key = `${p.campaign.weekIndex}:${r.index}`;
       if (player.week!.bonus[key]) return fail('locked', 'This question is already answered and locked.'); // one attempt, no retry through the API
@@ -285,6 +303,79 @@ export class GameService {
       player.week!.donated += charged;
       return { ok: true, charged, completed };
     }) as Promise<DonateReply>;
+  }
+
+  /**
+   * Teacher-only. Takes a student out of the class at the SERVER's current time: combat is settled up to that instant (so the
+   * student's damage until then is counted), then their DPS stops contributing to the shared campaign. This is the only path
+   * that deactivates an active member (the Firestore rules refuse a direct client write), so a removal can never be missed by
+   * settlement, whether the class is online or idle. Safe to repeat. Concurrent student requests serialize with it in the transaction.
+   */
+  async removeStudent(caller: Caller, req: RemoveStudentReq): Promise<RemoveStudentReply> {
+    const r = exactKeys(req, ['classroomId', 'studentId']);
+    if (typeof r.studentId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(r.studentId)) throw new ServiceError('invalid-argument', 'Invalid student.');
+    const cid = r.classroomId as string;
+    const sid = r.studentId;
+    if (!caller || typeof caller.uid !== 'string' || !caller.uid) throw new ServiceError('unauthenticated', 'Please sign in.');
+    return this.store.runTransaction(async (tx) => {
+      const [classroom, member, playerRaw, campaignRaw] = await tx.getMany<Doc>([path.classroom(cid), path.member(cid, sid), path.player(cid, sid), path.campaign(cid)]);
+      if (!classroom || classroom.ownerUid !== caller.uid || !(await this.isAllowlistedTeacher(tx, caller))) {
+        throw new ServiceError('permission-denied', 'Only the classroom owner can remove students.');
+      }
+      if (!member) throw new ServiceError('not-found', 'That student is not in this classroom.');
+      const now = await this.clock(tx);
+      if (member.status !== 'active') return { ok: true, removed: false, wasContributing: false, effectiveAt: now };
+
+      const tz = typeof classroom.timezone === 'string' && isValidTimeZone(classroom.timezone) ? classroom.timezone : 'UTC';
+      const p: Prep = {
+        tx, cid, uid: sid, now, tz,
+        settings: normalizeSettings(classroom.settings),
+        campaign: (campaignRaw as unknown as CampaignState | undefined) ?? newCampaign(now, tz),
+        player: (playerRaw as unknown as PlayerDoc | undefined) ?? null,
+        joinedAt: msOf(member.approvedAt) ?? msOf(member.requestedAt),
+        isTeacher: false, campaignDirty: !campaignRaw, playerDirty: false, roster: null, salt: '',
+      };
+      // 1. Settle to the effective removal time. The student is still an active member here, so everything up to `now` includes them.
+      await this.settleTo(p, 'force');
+      const c = p.campaign;
+
+      // 2. Work out whether they are counted in the aggregate DPS this week, and with how much.
+      const zero = { damage: 0, speed: 0, critChance: 0, critDamage: 0 };
+      const upgrades = p.player?.upgrades ?? zero;
+      const week = p.player?.week;
+      let contributing = 0;
+      if (week && week.index === c.weekIndex) {
+        if (week.activated) {
+          this.foldDamageOf(c, week);
+          contributing = week.dps;
+        }
+      } else if (c.zeroWeekAppliedFor === c.weekIndex && p.joinedAt !== null && p.joinedAt <= c.zeroWeekAt) {
+        contributing = personalDps(upgrades); // counted by the zero-question roster snapshot without ever opening the app
+      }
+      const wasContributing = contributing > 0 || (!!week && week.index === c.weekIndex && week.activated);
+      if (wasContributing) {
+        removeStudentDps(c, contributing);
+        p.campaignDirty = true;
+      }
+      // Always leave a player record whose week is marked inactive, so a later restore is never mistaken for "already counted".
+      p.player ??= { uid: sid, nickname: String(member.displayName ?? 'Student'), coins: 0, lifetimeCoins: 0, upgrades, createdAt: now };
+      {
+        const w = week && week.index === c.weekIndex ? week : { index: c.weekIndex, activated: false, accAt: 0, dps: 0, damage: 0, donated: 0, questions: 0, firstTry: 0, currentWrong: 0, bonus: {} };
+        w.activated = false;
+        w.dps = 0;
+        w.accAt = c.acc;
+        p.player.week = w;
+        tx.set(path.player(cid, sid), p.player as unknown as Doc);
+      }
+      tx.set(path.member(cid, sid), { ...member, status: 'removed', removedAt: now, removedBy: caller.uid });
+      if (p.campaignDirty) tx.set(path.campaign(cid), c as unknown as Doc);
+      return { ok: true, removed: true, wasContributing, effectiveAt: now };
+    }) as Promise<RemoveStudentReply>;
+  }
+
+  private foldDamageOf(c: CampaignState, w: PlayerWeek): void {
+    if (w.activated) w.damage += Math.max(0, w.dps * (c.acc - w.accAt));
+    w.accAt = c.acc;
   }
 
   // ------------------------------------------------------------------ transaction runner
@@ -362,6 +453,7 @@ export class GameService {
       }
 
       await this.settleTo(prep, opts.settle);
+      const sigBefore = campaignSignature(prep.campaign);
       if (!isTeacher) this.prepareWeek(prep);
 
       const core = await body(prep);
@@ -372,7 +464,7 @@ export class GameService {
         prep.player!.recentOps = ops.slice(-LIMITS.recentOps);
       }
       if (!isTeacher && (opts.mutating || prep.playerDirty)) prep.playerDirty = true;
-      if (opts.mutating) prep.campaignDirty = true;
+      if (campaignSignature(prep.campaign) !== sigBefore) prep.campaignDirty = true; // the operation changed shared state (not just time)
       if (prep.campaignDirty) tx.set(path.campaign(cid), prep.campaign as unknown as Doc);
       if (!isTeacher && prep.playerDirty) tx.set(path.player(cid, caller.uid), prep.player as unknown as Doc);
       return { ...core, ...this.stateReply(prep) };
@@ -396,7 +488,8 @@ export class GameService {
   // ------------------------------------------------------------------ settlement
   private async loadRoster(p: Prep): Promise<RosterEntry[]> {
     if (p.roster) return p.roster;
-    const members = await p.tx.list<Doc>(path.members(p.cid), { field: 'status', equals: 'active' });
+    const members = await p.tx.list<Doc>(path.members(p.cid), { field: 'status', equals: 'active' }, LIMITS.maxRoster + 1);
+    if (members.length > LIMITS.maxRoster) throw new ServiceError('failed-precondition', `A classroom can have at most ${LIMITS.maxRoster} active students.`);
     const uids = members.map(([id]) => id);
     const players = await p.tx.getMany<PlayerDoc>(uids.map((u) => path.player(p.cid, u)));
     p.roster = uids.map((uid, i) => ({
@@ -422,11 +515,14 @@ export class GameService {
       beginWeek(c, p.now, c.weekStart, ctx, roster);
     }
     const roster = fresh || settlementNeedsRoster(c, p.now, ctx) ? await this.loadRoster(p) : undefined;
-    settleCampaign(c, p.now, ctx, { roster });
-    p.campaignDirty = true;
+    const settled = settleCampaign(c, p.now, ctx, { roster });
+    // Settlement is deterministic from the stored state, so a pure advance of time does NOT need to be written (every write is
+    // delivered to every listening student). Persist only when something discrete happened (a boss fell, a week turned...).
+    if (fresh || settled.events > 0 || settled.skippedWeeks > 0) p.campaignDirty = true;
     // A teacher who switches to a zero-question week mid-week activates everyone (design §10.1).
     if (isZeroQuestionWeek(p.settings) && c.zeroWeekAppliedFor !== c.weekIndex) {
       applyZeroWeek(c, await this.loadRoster(p), p.now, p.now);
+      p.campaignDirty = true;
     }
   }
 

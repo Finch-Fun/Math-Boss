@@ -383,4 +383,29 @@ describe('multiplayer authoritative state (PR #6)', () => {
     await assertSucceeds(getDoc(doc(student('s1'), 'classrooms', 'c1', 'players', 's1')));
     await assertFails(getDoc(doc(student('s1'), 'classrooms', 'c1', 'players', 's2')));
   });
+  it('the private Bonus Question bank is unreadable and unwritable for every client', async () => {
+    await classroomWithStudent();
+    await env.withSecurityRulesDisabled(async (ctx) => setDoc(doc(ctx.firestore(), 'serverOnly', 'bonusBank'), { questions: [] }));
+    for (const db of [student('s1'), teacherA(), env.unauthenticatedContext().firestore()]) {
+      await assertFails(getDoc(doc(db, 'serverOnly', 'bonusBank')));
+      await assertFails(setDoc(doc(db, 'serverOnly', 'bonusBank'), { questions: [] }));
+    }
+  });
+
+  it('an ACTIVE student cannot be removed or deleted by a direct client write (only through the trusted function)', async () => {
+    await classroomWithStudent();
+    const m = doc(teacherA(), 'classrooms', 'c1', 'members', 's1');
+    await assertFails(updateDoc(m, { status: 'removed', approvedAt: serverTimestamp(), approvedBy: 'tA' }));
+    await assertFails(deleteDoc(m));
+    // Restoring/approving is still a client operation.
+    await assertSucceeds(updateDoc(m, { status: 'active', approvedAt: serverTimestamp(), approvedBy: 'tA' }));
+  });
+
+  it('pending students can still be rejected, and inactive memberships can be deleted, by the owning teacher', async () => {
+    await classroomWithStudent();
+    await requestJoin(student('s2'), 's2', 'c1', 'ABCD2345', 'pending', 'Moon Cat');
+    const m2 = doc(teacherA(), 'classrooms', 'c1', 'members', 's2');
+    await assertSucceeds(updateDoc(m2, { status: 'removed', approvedAt: serverTimestamp(), approvedBy: 'tA' }));
+    await assertSucceeds(deleteDoc(m2));
+  });
 });

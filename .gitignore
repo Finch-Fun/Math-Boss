@@ -15,3 +15,7 @@ serviceAccount*.json
 !.env.emulator
 functions/lib/
 functions/node_modules/
+
+# Private Bonus Question banks must never be committed (this repository is public).
+*.private.json
+bonus-bank.local.json
