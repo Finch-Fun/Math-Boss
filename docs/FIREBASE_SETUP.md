@@ -1,5 +1,7 @@
 # Firebase setup (Milestone 1)
 
+> Going live? The Hosting + Functions deployment workflow is in [LIVE_DEPLOYMENT.md](LIVE_DEPLOYMENT.md). This page covers the original setup and local emulators.
+
 Math Boss uses its **own** Firebase project, separate from any other project. Nothing here creates resources, enables billing, or deploys. You run these steps yourself.
 
 Without any Firebase settings the app runs in **demo mode** (the simulated class, saved in your browser). Firebase mode turns on automatically once `.env.local` is complete.

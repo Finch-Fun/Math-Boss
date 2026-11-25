@@ -7,7 +7,7 @@ Demo mode and the teacher/student role restrictions from PR #5 are unchanged. De
 
 ## Run it locally (Windows PowerShell)
 
-Prerequisites: Node 20 or newer, Java 11 or newer (for the Firestore emulator).
+Prerequisites: Node 22 or newer, Java 11 or newer (for the Firestore emulator).
 
 ```powershell
 npm install

@@ -1,5 +1,5 @@
 // Cloud Functions entry point: thin callable wrappers around the trusted game service (functions/src/core/service.ts).
-// Local-first: these are meant to run in the Firebase Emulator Suite. They are NOT deployed by this repo's scripts.
+// Runs in the Firebase Emulator Suite locally and is deployed to Cloud Functions with `npm run deploy:live` (see docs/LIVE_DEPLOYMENT.md).
 // Identity (uid, email, sign-in provider) is taken from the verified auth token, never from the request body.
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';

@@ -18,7 +18,9 @@ const REQUIRED = ['VITE_FIREBASE_API_KEY', 'VITE_FIREBASE_AUTH_DOMAIN', 'VITE_FI
 const clean = (v: string | undefined): string => (v ?? '').trim();
 
 export function readFirebaseConfig(env: Env): ConfigResult {
-  const useEmulator = clean(env.VITE_USE_FIREBASE_EMULATOR) === 'true';
+  // A production build (Vite sets PROD=true) can never use the emulators, whatever the environment says: the emulator flag is ignored.
+  const isProduction = String(env.PROD) === 'true';
+  const useEmulator = !isProduction && clean(env.VITE_USE_FIREBASE_EMULATOR) === 'true';
   if (useEmulator) {
     // The emulators accept placeholder credentials; only a project id is needed (use a "demo-" id so nothing real is touched).
     const projectId = clean(env.VITE_FIREBASE_PROJECT_ID) || 'demo-math-boss';
