@@ -5,12 +5,13 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import test from 'node:test';
+import { toPosix } from '../testSupport/paths';
 
 const root = join(import.meta.dirname, '..', '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 const walk = (dir: string): string[] =>
   readdirSync(join(root, dir)).flatMap((n) => {
-    const rel = join(dir, n);
+    const rel = toPosix(join(dir, n));
     return statSync(join(root, rel)).isDirectory() ? walk(rel) : [rel];
   });
 const sources = walk('src').filter((f) => /\.(ts|tsx)$/.test(f) && !f.endsWith('.test.ts'));

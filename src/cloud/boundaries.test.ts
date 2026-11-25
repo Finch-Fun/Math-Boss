@@ -6,12 +6,13 @@ import test from 'node:test';
 import { defaultSettings } from '../game/sample';
 import { classroomFields, initialPlayerFields, initialUpgrades } from './model';
 import { GRADE_LEVELS, JOIN_CODE_ALPHABET, generateJoinCode, validateClassroomInput } from './validation';
+import { textLines, toPosix } from '../testSupport/paths';
 
 const root = join(import.meta.dirname, '..', '..');
 const read = (p: string) => readFileSync(join(root, p), 'utf8');
 function walk(dir: string): string[] {
   return readdirSync(join(root, dir)).flatMap((n) => {
-    const rel = join(dir, n);
+    const rel = toPosix(join(dir, n));
     return statSync(join(root, rel)).isDirectory() ? walk(rel) : [rel];
   });
 }
@@ -39,7 +40,7 @@ test('only firebaseCloud.ts imports the Firebase SDK, and the UI loads it lazily
 
 test('no real credentials are committed and env files are ignored', () => {
   const env = read('.env.example');
-  for (const line of env.split('\n').filter((l) => /^VITE_FIREBASE_/.test(l))) assert.match(line, /=$/, `value must be blank: ${line}`);
+  for (const line of textLines(env).filter((l) => /^VITE_FIREBASE_/.test(l))) assert.match(line, /=$/, `value must be blank: ${line}`);
   const ignore = read('.gitignore');
   assert.ok(ignore.includes('.env.*') && ignore.includes('!.env.example') && ignore.includes('serviceAccount*.json'));
 });
