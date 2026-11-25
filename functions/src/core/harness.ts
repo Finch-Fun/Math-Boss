@@ -36,11 +36,11 @@ export interface Room {
   hours: (n: number) => void;
 }
 
-export function setup(opts: { students?: number; tz?: string; settings?: Partial<Settings>; start?: number } = {}): Room {
+export function setup(opts: { students?: number; tz?: string; settings?: Partial<Settings>; start?: number; noBonusBank?: boolean } = {}): Room {
   const store = new MemoryStore();
   const clock = { now: opts.start ?? MON_9AM };
   let counter = 0;
-  const svc = new GameService({ store, clock: async () => clock.now, newSalt: () => SALT, bonusBank: staticBonusBank(DEV_BANK) });
+  const svc = new GameService({ store, clock: async () => clock.now, newSalt: () => SALT, bonusBank: opts.noBonusBank ? undefined : staticBonusBank(DEV_BANK) });
   const n = opts.students ?? 3;
   const uids = Array.from({ length: n }, (_, i) => `u${i + 1}`);
   const room: Room = {

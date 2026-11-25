@@ -7,7 +7,7 @@ await build({
   outfile: 'functions/lib/index.js',
   bundle: true,
   platform: 'node',
-  target: 'node20',
+  target: 'node22',
   format: 'cjs',
   external: ['firebase-admin', 'firebase-admin/*', 'firebase-functions', 'firebase-functions/*'],
   sourcemap: true,
