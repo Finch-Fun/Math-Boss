@@ -1,76 +1,85 @@
-import { useCallback, useEffect, useState } from 'react';
-import { PROJECT_DEFS, PROJECT_KEYS, UPGRADE_DEFS, UPGRADE_KEYS } from '../../game/constants';
-import { campaignProjectCost, isCampaignProjectMaxed } from '../../game/campaign';
-import { fmtDps, fmtNum, fmtPct } from '../../game/format';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { PROJECT_DEFS, PROJECT_KEYS, UPGRADE_DEFS } from '../../game/constants';
+import { armor, bannerBonus, campaignProjectCost, isCampaignProjectMaxed } from '../../game/campaign';
+import { fmtNum, fmtPct } from '../../game/format';
+import { fmtDuration, fmtGameTime } from '../../game/time';
 import { SKILL_LABELS } from '../../game/questions';
-import { characterStats, dps, isMaxed, upgradeCost } from '../../game/upgrades';
+import { characterStats, dps, upgradeCost } from '../../game/upgrades';
 import type { UpgradeKey, Upgrades } from '../../game/types';
 import { toCloudError } from '../../cloud/errors';
 import type { PlayerView, PublicBonus, PublicQuestion } from '../../cloud/multiplayerTypes';
 import type { Classroom, Cloud } from '../../cloud/types';
-import { Bar, Card, Stat } from '../components';
+import Battlefield from '../../battlefield/Battlefield';
+import { viewFromCampaign } from '../../battlefield/view';
+import { etaToDefeat } from '../../cloud/liveState';
+import { HammerIcon, ScrollIcon, StarIcon, SwordIcon } from '../game/icons';
+import { Panel, StudentHud, focusNoScroll } from '../game/kit';
+import { BattleFacts, DailyProgress, JoinPrompt, ProjectGrid, UpgradeGrid, upgradeRows } from '../game/panels';
 import ClockPanel from './ClockPanel';
-import { SharedBattle } from './SharedBattle';
 import { useMultiplayer, type Multiplayer } from './useMultiplayer';
 
-type Tab = 'daily' | 'bonus' | 'upgrades' | 'projects';
 type Feedback = { kind: 'good' | 'bad' | 'info'; text: string } | null;
 
 /**
  * The real cooperative game. Everything shown here comes from the trusted server: the boss and castle are shared by the whole
  * class, and coins, rewards, upgrades and donations are decided by Cloud Functions. This screen only sends intents.
+ * The battlefield is a picture of that shared state; it never sends anything itself.
  */
-export default function MultiplayerStudent({ cloud, classroom }: { cloud: Cloud; classroom: Classroom }) {
+export default function MultiplayerStudent({ cloud, classroom, onBack }: { cloud: Cloud; classroom: Classroom; onBack?: () => void }) {
   const mp = useMultiplayer(cloud, classroom, 'student');
-  const [tab, setTab] = useState<Tab>('daily');
-  const tabs: [Tab, string][] = [['daily', 'Daily Review'], ['bonus', 'Bonus Questions'], ['upgrades', 'Upgrades'], ['projects', 'Classroom Projects']];
   const c = mp.projection?.state ?? null;
+  const me = mp.me;
+  const view = useMemo(() => (c ? viewFromCampaign(c, mp.now, classroom.id, me ? { uid: me.uid, activated: me.activated } : null) : null), [c, mp.now, classroom.id, me?.uid, me?.activated]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boss = c?.boss ?? null;
 
   return (
-    <div className="stack">
-      <p className="notice">
-        <strong>Multiplayer · shared with your class.</strong> The boss, castle, coins and upgrades are kept by the game server. Your classmates see the same boss you do.
-      </p>
+    <div className="student-home">
+      <StudentHud
+        classroomName={classroom.name}
+        coins={me?.coins ?? 0}
+        dps={me ? dps(me.upgrades) : 0}
+        bossNumber={boss?.number ?? null}
+        profile={
+          <>
+            {me && <span className="chip-profile" title="You">{me.nickname}</span>}
+            {onBack && <button onClick={onBack}>← Back</button>}
+          </>
+        }
+      />
       {mp.error && <p className="error" role="alert">{mp.error}</p>}
       {!c && !mp.error && <p className="muted">Joining the battle…</p>}
-      {c && <SharedBattle c={c} now={mp.now} className={classroom.name} settings={classroom.settings} ageMs={mp.projection?.ageMs ?? 0} />}
-      {mp.me && c && <PlayerPanel me={mp.me} />}
-      {c && mp.me && (
-        <>
-          <nav className="subtabs" aria-label="Student sections">
-            {tabs.map(([key, label]) => (
-              <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>{label}</button>
-            ))}
-          </nav>
-          {tab === 'daily' && <Daily cloud={cloud} classroom={classroom} mp={mp} />}
-          {tab === 'bonus' && <Bonus cloud={cloud} classroom={classroom} mp={mp} />}
-          {tab === 'upgrades' && <UpgradesTab cloud={cloud} classroom={classroom} mp={mp} me={mp.me} />}
-          {tab === 'projects' && <ProjectsTab cloud={cloud} classroom={classroom} mp={mp} me={mp.me} />}
-          <Card title="Recent events">
+      {view && <Battlefield view={view} />}
+      {me && !me.activated && c && <JoinPrompt />}
+      {c && me && (
+        <div className="home-grid">
+          <Daily cloud={cloud} classroom={classroom} mp={mp} />
+          <UpgradesTab cloud={cloud} classroom={classroom} mp={mp} me={me} />
+          <ProjectsTab cloud={cloud} classroom={classroom} mp={mp} me={me} />
+          <Bonus cloud={cloud} classroom={classroom} mp={mp} />
+          <Panel id="log" title="Battle info" icon={<ScrollIcon />} accent="green" className="area-events">
+            <BattleFacts
+              defeated={c.bossesDefeated}
+              eta={etaToDefeat(c) !== null ? fmtDuration(etaToDefeat(c) as number) : null}
+              armor={fmtPct(armor(c))}
+              bonus={fmtPct(bannerBonus(c))}
+              bossHit={boss ? fmtNum(Math.round(boss.attackPerHour * (1 - armor(c)))) : null}
+            />
+            <p className="muted small">Each fighter on the battlefield stands for a classmate. Your character has the YOU tag. Server-settled at {fmtGameTime(c.lastSettledAt)}.</p>
             <ul className="events">{c.log.slice(0, 6).map((e, i) => <li key={`${e.at}-${i}`}>{new Date(e.at).toLocaleString()} — {e.text}</li>)}</ul>
-          </Card>
-        </>
+          </Panel>
+        </div>
       )}
       <ClockPanel cloud={cloud} onChanged={mp.sync} />
     </div>
   );
 }
 
-function PlayerPanel({ me }: { me: PlayerView }) {
+function PlayerStatsLine({ me }: { me: PlayerView }) {
   const stats = characterStats(me.upgrades);
   return (
-    <Card title={`${me.nickname} (you)`}>
-      <div className="stats">
-        <Stat label="Coins" value={`🪙 ${fmtNum(me.coins)}`} />
-        <Stat label="Your DPS" value={fmtDps(dps(me.upgrades))} />
-        <Stat label="Damage this week" value={fmtNum(me.weekDamage)} />
-        <Stat label="Weekly status" value={me.activated ? 'Active ⚔️' : 'Inactive'} />
-      </div>
-      <p className="muted small">
-        Damage {stats.damage} · {stats.attacksPerSecond.toFixed(2)} attacks/sec · {fmtPct(stats.critChance)} crit chance · {stats.critMultiplier.toFixed(1)}× crit damage
-      </p>
-      {!me.activated && <p className="notice">Answer one Daily Review question correctly to join this week&apos;s battle. You stay active until Monday.</p>}
-    </Card>
+    <p className="muted small stats-line">
+      Damage {stats.damage} · {stats.attacksPerSecond.toFixed(2)} attacks/sec · {fmtPct(stats.critChance)} crit chance · {stats.critMultiplier.toFixed(1)}× crit damage · This week: {fmtNum(me.weekDamage)} damage
+    </p>
   );
 }
 
@@ -134,34 +143,37 @@ function Daily({ cloud, classroom, mp }: { cloud: Cloud; classroom: Classroom; m
     }
   };
 
-  if (zeroWeek) return <Card title="Daily Review"><p>No Daily Review questions are assigned this week, so every student is automatically active. 🎉</p></Card>;
-  if (!q) return <Card title="Daily Review"><p className="muted">Loading your question…</p>{error && <p className="error">{error}</p>}</Card>;
+  const progress = <DailyProgress done={me.weekQuestions} unlocked={me.dailyUnlocked} remaining={me.dailyRemaining} active={me.activated} zeroWeek={zeroWeek} />;
+  if (zeroWeek) return <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">{progress}<p>No Daily Review questions are assigned this week, so every student is automatically active. 🎉</p></Panel>;
+  if (!q) return <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">{progress}<p className="muted">Loading your question…</p>{error && <p className="error">{error}</p>}</Panel>;
   if (!q.question) {
     return (
-      <Card title="Daily Review">
+      <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">
+        {progress}
         <p>All caught up! You completed {me.weekQuestions} of {me.dailyUnlocked} unlocked questions. More unlock on their assigned day.</p>
         {feedback && <p className={`feedback ${feedback.kind}`}>{feedback.text}</p>}
-      </Card>
+      </Panel>
     );
   }
   const question = q.question;
   return (
-    <Card title="Daily Review">
-      <p className="muted small">Question {me.weekQuestions + 1} of {me.dailyUnlocked} unlocked · {me.dailyRemaining} left · {SKILL_LABELS[question.skill]} ({question.difficulty})</p>
+    <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">
+      {progress}
+      <p className="muted small">Question {me.weekQuestions + 1} of {me.dailyUnlocked} unlocked · {SKILL_LABELS[question.skill]} ({question.difficulty})</p>
       <p className="question">{question.prompt}</p>
       {question.type === 'choice' ? (
         <div className="choices">{question.choices!.map((ch) => <button key={ch} disabled={busy} onClick={() => submit(String(ch))}>{ch}</button>)}</div>
       ) : (
         <form onSubmit={(e) => { e.preventDefault(); void submit(input); }}>
-          <input aria-label="Your answer" inputMode="numeric" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Your answer" autoFocus />
-          <button type="submit" className="primary" disabled={busy || !input.trim()}>Submit</button>
+          <input aria-label="Your answer" inputMode="numeric" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Your answer" ref={focusNoScroll} />
+          <button type="submit" className="btn btn-primary" disabled={busy || !input.trim()}>Submit</button>
         </form>
       )}
       {hint && <p className="hint">💡 {hint}</p>}
       {feedback && <p className={`feedback ${feedback.kind}`}>{feedback.text}</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      <p className="muted small">First try 10 coins · second try 5 · third or later 2. You must answer correctly to move on.</p>
-    </Card>
+      <p className="muted small">You must answer correctly to move on.</p>
+    </Panel>
   );
 }
 
@@ -169,15 +181,22 @@ function Bonus({ cloud, classroom, mp }: { cloud: Cloud; classroom: Classroom; m
   const { busy, error, run } = useCall();
   const [data, setData] = useState<{ enabled: boolean; questions: PublicBonus[] } | null>(null);
   const [selected, setSelected] = useState<Record<number, number>>({});
+  // Collapsed by default and loaded on first open, so the home screen makes no extra server call for a feature that may be switched off.
+  const [open, setOpen] = useState(false);
   const load = useCallback(async () => {
     const r = await run(() => cloud.game.getBonus(classroom.id));
     if (r?.ok) setData({ enabled: r.enabled, questions: r.questions });
   }, [cloud, classroom.id, run]);
-  useEffect(() => void load(), [load]);
-  if (!data) return <Card title="Bonus Questions"><p className="muted">Loading…</p>{error && <p className="error">{error}</p>}</Card>;
-  if (!data.enabled) return <Card title="Bonus Questions"><p>Bonus Questions are not available right now.</p></Card>;
+  useEffect(() => {
+    if (open) void load();
+  }, [open, load]);
+  const toggle = <button className="btn" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide' : 'Show'}</button>;
+  const P = (children: ReactNode) => <Panel id="bonus" title="Bonus Questions" icon={<StarIcon />} accent="purple" className="area-bonus" actions={toggle}>{children}</Panel>;
+  if (!open) return P(<p className="muted small">Optional extra questions for 20 coins each. One attempt per question.</p>);
+  if (!data) return P(<><p className="muted">Loading…</p>{error && <p className="error">{error}</p>}</>);
+  if (!data.enabled) return P(<p>Bonus Questions are not available right now.</p>);
   return (
-    <Card title="Bonus Questions">
+    <Panel id="bonus" title="Bonus Questions" icon={<StarIcon />} accent="purple" className="area-bonus" actions={toggle}>
       <p className="muted small">One attempt each. Correct answers earn 20 coins. No hints, and answers lock when submitted.</p>
       {data.questions.map((q) => (
         <div className="bonus" key={q.index}>
@@ -205,7 +224,7 @@ function Bonus({ cloud, classroom, mp }: { cloud: Cloud; classroom: Classroom; m
         </div>
       ))}
       {error && <p className="error" role="alert">{error}</p>}
-    </Card>
+    </Panel>
   );
 }
 
@@ -235,23 +254,10 @@ function UpgradesTab({ cloud, classroom, mp, me }: { cloud: Cloud; classroom: Cl
     } else setMessage(r.hint ? `${r.reason} ${r.hint}` : r.reason);
   };
   return (
-    <Card title="Permanent Upgrades">
+    <Panel id="upgrades" title="Character Upgrades" icon={<SwordIcon />} accent="red" className="area-upgrades">
       <p className="muted small">Upgrades are permanent. They never reset when the week ends.</p>
-      <div className="grid">
-        {UPGRADE_KEYS.map((key) => {
-          const level = me.upgrades[key];
-          const maxed = isMaxed(me.upgrades, key);
-          const cost = upgradeCost(key, level);
-          return (
-            <div className="upgrade" key={key}>
-              <h3>{UPGRADE_DEFS[key].label} <span className="muted">Lv {level}</span></h3>
-              <p className="muted small">{UPGRADE_DEFS[key].blurb}</p>
-              <p>{statText(key, me.upgrades)}{!maxed && <> → <strong>{statText(key, { ...me.upgrades, [key]: level + 1 })}</strong></>}</p>
-              {maxed ? <button disabled>Maxed</button> : <button className="primary" disabled={busy || me.coins < cost} onClick={() => (needMath ? setPending(key) : void buy(key))}>Buy for 🪙 {cost}</button>}
-            </div>
-          );
-        })}
-      </div>
+      <UpgradeGrid rows={upgradeRows(me.upgrades, statText)} coins={me.coins} busy={busy} onBuy={(key) => (needMath ? setPending(key) : void buy(key))} />
+      <PlayerStatsLine me={me} />
       {message && <p className="feedback info">{message}</p>}
       {error && <p className="error" role="alert">{error}</p>}
       {pending && (
@@ -268,7 +274,7 @@ function UpgradesTab({ cloud, classroom, mp, me }: { cloud: Cloud; classroom: Cl
           </div>
         </div>
       )}
-    </Card>
+    </Panel>
   );
 }
 
@@ -277,42 +283,31 @@ function ProjectsTab({ cloud, classroom, mp, me }: { cloud: Cloud; classroom: Cl
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
   const c = mp.projection!.state;
+  const rows = PROJECT_KEYS.map((key) => ({ key, level: c.projects[key].level, funded: c.projects[key].funded, cost: campaignProjectCost(c, key), maxed: isCampaignProjectMaxed(c, key) }));
   return (
-    <Card title="Classroom Projects">
+    <Panel id="projects" title="Castle Projects" icon={<HammerIcon />} accent="blue" className="area-projects">
       <p className="muted small">Donations are voluntary and shared by the whole class. Project upgrades reset every Monday.</p>
-      <div className="grid">
-        {PROJECT_KEYS.map((key) => {
-          const cost = campaignProjectCost(c, key);
-          const p = c.projects[key];
-          const maxed = isCampaignProjectMaxed(c, key);
-          const amount = amounts[key] ?? '10';
-          return (
-            <div className="upgrade" key={key}>
-              <h3>{PROJECT_DEFS[key].label} <span className="muted">×{p.level}</span></h3>
-              <p className="muted small">{PROJECT_DEFS[key].blurb}</p>
-              {maxed ? <p>Maxed for this week</p> : (
-                <>
-                  <Bar kind="project" value={p.funded} max={cost} label={`${p.funded} / ${cost} coins`} />
-                  <div className="row">
-                    <input aria-label={`Donation to ${PROJECT_DEFS[key].label}`} inputMode="numeric" value={amount} onChange={(e) => setAmounts({ ...amounts, [key]: e.target.value })} />
-                    <button className="primary" disabled={busy} onClick={async () => {
-                      const n = Number(amount);
-                      if (!Number.isInteger(n) || n < 1) return setMessage('Enter a whole number of coins (1 or more).');
-                      const r = await run(() => cloud.game.donate(classroom.id, key, n));
-                      if (!r) return;
-                      if (r.ok) { mp.apply(r); setMessage(`Donated ${r.charged} coins to ${PROJECT_DEFS[key].label}${r.completed ? ' — project complete!' : '.'}`); }
-                      else setMessage(r.reason);
-                    }}>Donate</button>
-                    <button onClick={() => setAmounts({ ...amounts, [key]: String(Math.max(1, Math.min(me.coins, cost - p.funded))) })}>Max</button>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <ProjectGrid
+        rows={rows}
+        amounts={amounts}
+        coins={me.coins}
+        busy={busy}
+        onAmount={(key, v) => setAmounts({ ...amounts, [key]: v })}
+        onMax={(key) => {
+          const r = rows.find((x) => x.key === key)!;
+          setAmounts({ ...amounts, [key]: String(Math.max(1, Math.min(me.coins, r.cost - r.funded))) });
+        }}
+        onDonate={async (key) => {
+          const n = Number(amounts[key] ?? '10');
+          if (!Number.isInteger(n) || n < 1) return setMessage('Enter a whole number of coins (1 or more).');
+          const r = await run(() => cloud.game.donate(classroom.id, key, n));
+          if (!r) return;
+          if (r.ok) { mp.apply(r); setMessage(`Donated ${r.charged} coins to ${PROJECT_DEFS[key].label}${r.completed ? ' — project complete!' : '.'}`); }
+          else setMessage(r.reason);
+        }}
+      />
       {message && <p className="feedback info">{message}</p>}
       {error && <p className="error" role="alert">{error}</p>}
-    </Card>
+    </Panel>
   );
 }

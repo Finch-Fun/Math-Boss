@@ -1,0 +1,94 @@
+/* Battlefield layout and animation. Everything animates with transforms/opacity only (cheap on school Chromebooks). */
+.bf { position: relative; border: 3px solid var(--mb-ink); border-radius: var(--mb-r-lg); background: #8fd2f2; box-shadow: 0 5px 0 var(--mb-ink); overflow: hidden; display: flex; flex-direction: column; }
+.bf-stage { position: relative; width: 100%; aspect-ratio: 1000 / 440; line-height: 0; }
+.bf-svg { width: 100%; height: 100%; display: block; }
+.bf-hud { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; gap: 12px; pointer-events: none; }
+.bf-plate { width: min(36%, 330px); background: rgba(255, 250, 240, 0.94); border: 2.5px solid var(--mb-ink); border-radius: var(--mb-r-md); padding: 5px 8px 7px; }
+.bf-plate-title { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 8px; font-weight: 800; font-size: var(--mb-fs-sm); color: var(--mb-ink); margin-bottom: 4px; }
+.bf-name { font-weight: 700; color: var(--mb-ink-soft); }
+.bf-banner { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); width: min(46%, 440px); display: flex; flex-direction: column; text-align: center; background: rgba(255, 250, 240, 0.96); border: 2.5px solid var(--mb-ink); border-radius: var(--mb-r-md); padding: 6px 10px; color: var(--mb-ink); font-size: var(--mb-fs-sm); line-height: 1.3; }
+.bf-banner strong { font-size: var(--mb-fs-md); }
+.bf-banner.tone-combat { background: #ffe3e0; }
+.bf-banner.tone-training { background: #e1f7e5; }
+.bf-banner.tone-breach { background: #ffd8d0; border-color: #a8271f; }
+.bf-banner.tone-waiting, .bf-banner.tone-idle { background: #fff1c2; }
+.bf-banner.tone-victory { background: #ffe58a; animation: bf-pop 0.5s ease-out; }
+.bf-army { position: absolute; left: 10px; bottom: 10px; max-width: 26%; background: rgba(255, 250, 240, 0.94); border: 2.5px solid var(--mb-ink); border-radius: var(--mb-r-md); padding: 4px 8px; font-size: var(--mb-fs-xs); line-height: 1.35; color: var(--mb-ink); }
+
+/* ---- Small screens: same left/right orientation, simpler chrome. HUD, banner and counts stack around the picture. ---- */
+@media (max-width: 760px) {
+  .bf-hud, .bf-banner, .bf-army { position: static; transform: none; width: auto; max-width: none; }
+  .bf-hud { order: -1; padding: 6px; background: rgba(255, 250, 240, 0.97); border-bottom: 3px solid var(--mb-ink); pointer-events: auto; }
+  .bf-plate { width: 48%; border: 0; background: transparent; padding: 0; }
+  .bf-banner { order: 2; margin: 6px; }
+  .bf-army { order: 3; margin: 0 6px 6px; }
+}
+@media (max-width: 440px) { .bf-stage { aspect-ratio: 1000 / 470; } }
+
+/* ---- Idle: everyone breathes ---- */
+.sprite .bob { animation: bf-bob var(--bob, 3s) ease-in-out infinite; animation-delay: var(--bob-d, 0s); }
+.sprite .sway { animation: bf-sway var(--sway, 11s) ease-in-out infinite; animation-delay: var(--bob-d, 0s); }
+.you-tag { animation: bf-float 2.2s ease-in-out infinite; }
+@keyframes bf-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.2px); } }
+@keyframes bf-sway { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
+@keyframes bf-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+.cloud { animation: bf-cloud 70s ease-in-out infinite alternate; }
+.cloud-b { animation-duration: 95s; animation-direction: alternate-reverse; }
+@keyframes bf-cloud { from { transform: translateX(-30px); } to { transform: translateX(46px); } }
+.flag { transform-box: fill-box; transform-origin: 0 50%; animation: bf-flag 2.4s ease-in-out infinite; }
+@keyframes bf-flag { 0%, 100% { transform: skewY(0deg) scaleX(1); } 50% { transform: skewY(4deg) scaleX(0.92); } }
+
+/* ---- Boss: breathing, attack lunge, defeat ---- */
+.boss-breath { transform-box: fill-box; transform-origin: 50% 100%; animation: bf-breath 3.6s ease-in-out infinite; }
+@keyframes bf-breath { 0%, 100% { transform: scale(1, 1) rotate(0deg); } 50% { transform: scale(1.012, 1.03) rotate(-0.8deg); } }
+.boss .boss-head { transform-box: fill-box; transform-origin: 50% 100%; animation: bf-nod 5.5s ease-in-out infinite; }
+@keyframes bf-nod { 0%, 70%, 100% { transform: rotate(0deg); } 80% { transform: rotate(4deg); } }
+.boss .boss-arm { transform-box: fill-box; transform-origin: 0% 50%; }
+[data-mode='fighting'] .boss.strikes .boss-lunge { animation: bf-lunge 8s ease-in-out infinite; }
+[data-mode='fighting'] .boss.strikes .boss-arm { animation: bf-club 8s ease-in-out infinite; }
+@keyframes bf-lunge { 0%, 80%, 100% { transform: translateX(0); } 86%, 90% { transform: translateX(34px); } }
+@keyframes bf-club { 0%, 78%, 100% { transform: rotate(0deg); } 84% { transform: rotate(-42deg); } 88% { transform: rotate(34deg); } 94% { transform: rotate(0deg); } }
+[data-mode='fighting'] .boss-slash { animation: bf-slash 8s linear infinite; opacity: 0; }
+[data-mode='fighting'] .castle { animation: bf-shake 8s linear infinite; }
+@keyframes bf-slash { 0%, 87% { opacity: 0; transform: translate(780px, 262px) scale(0.6); } 89% { opacity: 1; transform: translate(780px, 262px) scale(1.1); } 94%, 100% { opacity: 0; transform: translate(780px, 262px) scale(1.2); } }
+@keyframes bf-shake { 0%, 87%, 94%, 100% { transform: translateX(0); } 89% { transform: translateX(-3px); } 91% { transform: translateX(2px); } 93% { transform: translateX(-1px); } }
+.boss.defeating .boss-lunge { animation: none; }
+.boss.defeating .boss-breath { animation: bf-defeat 1.7s ease-in forwards; transform-origin: 50% 100%; }
+@keyframes bf-defeat { 0% { transform: rotate(0deg) scale(1); opacity: 1; } 35% { transform: rotate(-9deg) scale(1.03); opacity: 1; } 100% { transform: rotate(-82deg) translateY(30px) scale(0.9); opacity: 0; } }
+.boss-slash { opacity: 0; }
+
+/* ---- Castle ---- */
+.castle .smoke { animation: bf-smoke 3.4s ease-out infinite; }
+.castle .smoke.s2 { animation-delay: -1.7s; }
+@keyframes bf-smoke { 0% { transform: translateY(0) scale(0.6); opacity: 0.9; } 100% { transform: translateY(-46px) scale(1.7); opacity: 0; } }
+
+/* ---- Attacks: only while the class is really fighting, and only for activated students (the .attacking class) ---- */
+.sprite.warrior.attacking .swing { transform-box: fill-box; transform-origin: 100% 90%; animation: bf-swing var(--atk, 1.8s) ease-in-out infinite; animation-delay: var(--atk-d, 0s); }
+.sprite.warrior.attacking .lunge { animation: bf-step var(--atk, 1.8s) ease-in-out infinite; animation-delay: var(--atk-d, 0s); }
+@keyframes bf-swing { 0%, 50%, 100% { transform: rotate(18deg); } 60% { transform: rotate(-58deg); } 72% { transform: rotate(26deg); } }
+@keyframes bf-step { 0%, 52%, 100% { transform: translateX(0); } 62% { transform: translateX(-7px); } 82% { transform: translateX(0); } }
+.sprite.ranger.attacking .bow { animation: bf-draw var(--atk, 2.4s) ease-in-out infinite; animation-delay: var(--atk-d, 0s); }
+@keyframes bf-draw { 0%, 100% { transform: translateX(0); } 45% { transform: translateX(5px); } 55% { transform: translateX(5px); } 62% { transform: translateX(-2px); } }
+.sprite.mage.attacking .staff { transform-box: fill-box; transform-origin: 50% 92%; animation: bf-cast var(--atk, 2.6s) ease-in-out infinite; animation-delay: var(--atk-d, 0s); }
+.sprite.mage.attacking .orb { transform-box: fill-box; transform-origin: 50% 50%; animation: bf-orb var(--atk, 2.6s) ease-in-out infinite; animation-delay: var(--atk-d, 0s); }
+@keyframes bf-cast { 0%, 45%, 100% { transform: rotate(0deg); } 58% { transform: rotate(-16deg); } 72% { transform: rotate(4deg); } }
+@keyframes bf-orb { 0%, 40%, 100% { transform: scale(1); } 55% { transform: scale(1.5); } }
+.proj { opacity: 0; animation: bf-fly var(--atk, 2.4s) linear infinite; animation-delay: var(--atk-d, 0s); }
+.proj.orb { animation-name: bf-fly-orb; }
+@keyframes bf-fly { 0%, 58% { transform: translate(0, 0); opacity: 0; } 60% { opacity: 1; } 78% { transform: translate(calc(var(--dx) * 0.5), calc(var(--dy) * 0.5 - 22px)); opacity: 1; } 96% { transform: translate(var(--dx), var(--dy)); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+@keyframes bf-fly-orb { 0%, 58% { transform: translate(0, 0); opacity: 0; } 60% { opacity: 1; } 96% { transform: translate(var(--dx), var(--dy)); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)); opacity: 0; } }
+.impact { opacity: 0; transform-box: fill-box; transform-origin: 50% 50%; animation: bf-hit 1.9s ease-out infinite; }
+.impact.i1 { animation-duration: 2.6s; animation-delay: -0.9s; }
+.impact.i2 { animation-duration: 3.1s; animation-delay: -1.6s; }
+@keyframes bf-hit { 0%, 60% { opacity: 0; transform: scale(0.4); } 66% { opacity: 1; transform: scale(1.1); } 80%, 100% { opacity: 0; transform: scale(1.5); } }
+[data-mode='fighting'][data-boss='alive'] .boss-breath { animation: bf-breath 3.6s ease-in-out infinite, bf-hurt 2.3s ease-in-out infinite; }
+@keyframes bf-hurt { 0%, 58%, 70%, 100% { translate: 0 0; } 62% { translate: -3px 0; } 66% { translate: 2px 0; } }
+@keyframes bf-pop { 0% { transform: translateX(-50%) scale(0.85); } 100% { transform: translateX(-50%) scale(1); } }
+@media (max-width: 760px) { @keyframes bf-pop { 0% { transform: scale(0.9); } 100% { transform: scale(1); } } }
+
+/* ---- Paused while the tab is hidden; off for people who prefer reduced motion (state is still shown in text and health bars) ---- */
+.bf[data-paused='true'] * { animation-play-state: paused !important; }
+@media (prefers-reduced-motion: reduce) {
+  .bf * { animation: none !important; }
+  .proj, .impact, .boss-slash { display: none; }
+}
