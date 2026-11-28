@@ -1,120 +1,67 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { bonusKey, currentDailyQuestion, dailyRemaining, purchaseUpgrade, submitBonusAnswer, submitDailyAnswer } from '../game/actions';
-import { PROJECT_DEFS, PROJECT_KEYS, UPGRADE_DEFS, UPGRADE_KEYS } from '../game/constants';
-import { armorPct, castleMaxHp, dpsBonus, getStudent, studentDps, weeklyUnlocked } from '../game/core';
+import { PROJECT_DEFS, PROJECT_KEYS, UPGRADE_DEFS } from '../game/constants';
+import { armorPct, dpsBonus, getStudent, studentDps, weeklyUnlocked } from '../game/core';
 import { donate } from '../game/projects';
 import { currentProjectCost, isProjectMaxed } from '../game/projects';
 import { fmtDps, fmtNum, fmtPct } from '../game/format';
 import { bonusQuestionsForWeek, hintFor, SKILL_LABELS } from '../game/questions';
-import { describePhase, etaToDefeatMs } from '../game/report';
+import { etaToDefeatMs } from '../game/report';
 import { fmtDuration, fmtGameTime } from '../game/time';
 import type { GameState, Student, UpgradeKey, Upgrades } from '../game/types';
-import { characterStats, dps, isMaxed, upgradeCost } from '../game/upgrades';
-import { Bar, Card, Stat } from './components';
+import { characterStats, dps, upgradeCost } from '../game/upgrades';
+import Battlefield from '../battlefield/Battlefield';
+import { viewFromGameState } from '../battlefield/view';
+import { HammerIcon, ScrollIcon, StarIcon, SwordIcon } from './game/icons';
+import { Panel, StudentHud, focusNoScroll } from './game/kit';
+import { BattleFacts, DailyProgress, JoinPrompt, ProjectGrid, UpgradeGrid, upgradeRows } from './game/panels';
 import type { Game } from './useGame';
 
-const BOSS_ICONS = ['👹', '🧌', '🐉', '🗿', '👻', '🦑', '⛈️'];
-
-type Tab = 'daily' | 'bonus' | 'upgrades' | 'projects';
-
+/** The local prototype student screen (demo mode and the teacher's simulated preview). Same layout as the multiplayer screen. */
 export default function StudentView({ game }: { game: Game }) {
   const s = game.state;
   const player = getStudent(s, s.playerId);
-  const [tab, setTab] = useState<Tab>('daily');
-  const tabs: [Tab, string][] = [
-    ['daily', 'Daily Review'],
-    ['bonus', 'Bonus Questions'],
-    ['upgrades', 'Upgrades'],
-    ['projects', 'Classroom Projects'],
-  ];
+  const view = useMemo(() => viewFromGameState(s), [s]);
+  const eta = etaToDefeatMs(s);
+  const boss = s.battle.boss;
   return (
-    <div className="stack">
-      <BattlePanel s={s} />
-      <PlayerPanel s={s} player={player} />
-      <nav className="subtabs" aria-label="Student sections">
-        {tabs.map(([key, label]) => (
-          <button key={key} className={tab === key ? 'active' : ''} onClick={() => setTab(key)}>
-            {label}
-          </button>
-        ))}
-      </nav>
-      {tab === 'daily' && <DailyReview game={game} player={player} />}
-      {tab === 'bonus' && <BonusQuestions game={game} player={player} />}
-      {tab === 'upgrades' && <Upgrades game={game} player={player} />}
-      {tab === 'projects' && <Projects game={game} player={player} />}
-      <Card title="Recent events">
-        <ul className="events">
-          {s.log.slice(0, 6).map((e, i) => (
-            <li key={`${e.at}-${i}`}>
-              <span className="muted">{fmtGameTime(e.at)}</span> {e.text}
-            </li>
-          ))}
-        </ul>
-      </Card>
+    <div className="student-home">
+      <StudentHud classroomName={s.className} coins={player.coins} dps={dps(player.upgrades)} bossNumber={boss?.number ?? null} profile={<span className="chip-profile" title="You">{player.nickname}</span>} />
+      <Battlefield view={view} />
+      {!player.activated && <JoinPrompt />}
+      <div className="home-grid">
+        <DailyReview game={game} player={player} />
+        <Upgrades game={game} player={player} />
+        <Projects game={game} player={player} />
+        <BonusQuestions game={game} player={player} />
+        <Panel id="log" title="Battle info" icon={<ScrollIcon />} accent="green" className="area-events">
+          <BattleFacts
+            defeated={s.battle.bossesDefeated}
+            eta={eta !== null ? fmtDuration(eta) : null}
+            armor={fmtPct(armorPct(s))}
+            bonus={fmtPct(dpsBonus(s))}
+            bossHit={boss ? fmtNum(Math.round(boss.attackPerHour * (1 - armorPct(s)))) : null}
+          />
+          <ul className="events">
+            {s.log.slice(0, 6).map((e, i) => (
+              <li key={`${e.at}-${i}`}>
+                <span className="muted">{fmtGameTime(e.at)}</span> {e.text}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
     </div>
   );
 }
 
-function BattlePanel({ s }: { s: GameState }) {
-  const b = s.battle;
-  const boss = b.boss;
-  const phase = describePhase(s);
-  const eta = etaToDefeatMs(s);
-  const max = castleMaxHp(s);
-  return (
-    <Card className="battle">
-      <div className={`phase tone-${phase.tone}`}>
-        <strong>{phase.title}</strong> — {phase.detail}
-      </div>
-      <div className="battle-grid">
-        <div>
-          <div className="big-icon" aria-hidden="true">
-            {BOSS_ICONS[((boss?.number ?? 1) - 1) % BOSS_ICONS.length]}
-          </div>
-          <h3>
-            Boss {boss?.number}: {boss?.name}
-          </h3>
-          {boss && <Bar kind="boss" value={boss.hp} max={boss.maxHp} label={`${fmtNum(boss.hp)} / ${fmtNum(boss.maxHp)} HP`} />}
-          <p className="muted small">
-            Bosses defeated this week: <strong>{b.bossesDefeated}</strong>
-            {eta !== null && <> · At the current class DPS: about {fmtDuration(eta)} to defeat</>}
-          </p>
-        </div>
-        <div>
-          <div className="big-icon" aria-hidden="true">
-            🏰
-          </div>
-          <h3>Classroom Castle</h3>
-          <Bar kind="castle" value={b.castleHp} max={max} label={`${fmtNum(b.castleHp)} / ${fmtNum(max)} HP`} />
-          <p className="muted small">
-            Armor {fmtPct(armorPct(s))} · Class DPS bonus +{fmtPct(dpsBonus(s))}
-            {boss && <> · Boss hits for {fmtNum(Math.round(boss.attackPerHour * (1 - armorPct(s))))} per hour</>}
-          </p>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-function PlayerPanel({ s, player }: { s: GameState; player: Student }) {
+function PlayerStats({ s, player }: { s: GameState; player: Student }) {
   const stats = characterStats(player.upgrades);
   return (
-    <Card title={`${player.nickname} (you)`}>
-      <div className="stats">
-        <Stat label="Coins" value={`🪙 ${fmtNum(player.coins)}`} />
-        <Stat label="Your DPS" value={fmtDps(dps(player.upgrades))} />
-        <Stat label="Damage this week" value={fmtNum(player.weekDamage)} />
-        <Stat label="Weekly status" value={player.activated ? 'Active ⚔️' : 'Inactive'} />
-      </div>
-      <p className="muted small">
-        Damage {stats.damage} · {stats.attacksPerSecond.toFixed(2)} attacks/sec · {fmtPct(stats.critChance)} crit chance · {stats.critMultiplier.toFixed(1)}× crit damage
-        {player.activated && <> · Contributing {fmtDps(studentDps(s, player))} DPS right now</>}
-      </p>
-      {!player.activated && (
-        <p className="notice">Answer one Daily Review question correctly to join this week&apos;s battle. You stay active until Monday.</p>
-      )}
-      <p className="muted small">Game time: {fmtGameTime(s.now)}</p>
-    </Card>
+    <p className="muted small stats-line">
+      Damage {stats.damage} · {stats.attacksPerSecond.toFixed(2)} attacks/sec · {fmtPct(stats.critChance)} crit chance · {stats.critMultiplier.toFixed(1)}× crit damage · This week: {fmtNum(player.weekDamage)} damage
+      {player.activated && <> · Contributing {fmtDps(studentDps(s, player))} DPS right now</>}
+    </p>
   );
 }
 
@@ -140,28 +87,32 @@ function DailyReview({ game, player }: { game: Game; player: Student }) {
     }
   };
 
+  const progress = <DailyProgress done={player.weekQuestions} unlocked={unlocked} remaining={remaining} active={player.activated} zeroWeek={zeroWeek} />;
   if (zeroWeek) {
     return (
-      <Card title="Daily Review">
+      <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">
+        {progress}
         <p>No Daily Review questions are assigned this week, so every student is automatically active. 🎉</p>
-      </Card>
+      </Panel>
     );
   }
   if (!q) {
     return (
-      <Card title="Daily Review">
+      <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">
+        {progress}
         <p>
           All caught up! You completed {player.weekQuestions} of {unlocked} unlocked questions. More unlock on their assigned day.
         </p>
         {feedback && <p className={`feedback ${feedback.kind}`}>{feedback.text}</p>}
-      </Card>
+      </Panel>
     );
   }
   const hint = hintFor(q, player.currentWrong);
   return (
-    <Card title="Daily Review">
+    <Panel id="daily" title="Daily Review" icon={<ScrollIcon />} accent="gold" className="area-daily">
+      {progress}
       <p className="muted small">
-        Question {player.weekQuestions + 1} of {unlocked} unlocked this week · {remaining} left · {SKILL_LABELS[q.skill]} ({q.difficulty})
+        Question {player.weekQuestions + 1} of {unlocked} unlocked this week · {SKILL_LABELS[q.skill]} ({q.difficulty})
       </p>
       <p className="question">{q.prompt}</p>
       {q.type === 'choice' ? (
@@ -179,32 +130,45 @@ function DailyReview({ game, player }: { game: Game; player: Student }) {
             submit(input);
           }}
         >
-          <input aria-label="Your answer" inputMode="numeric" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Your answer" autoFocus />
-          <button type="submit" className="primary">
+          <input aria-label="Your answer" inputMode="numeric" value={input} onChange={(e) => setInput(e.target.value)} placeholder="Your answer" ref={focusNoScroll} />
+          <button type="submit" className="btn btn-primary">
             Submit
           </button>
         </form>
       )}
       {hint && <p className="hint">💡 {hint}</p>}
       {feedback && <p className={`feedback ${feedback.kind}`}>{feedback.text}</p>}
-      <p className="muted small">First try 10 coins · second try 5 · third or later 2. You must answer correctly to move on.</p>
-    </Card>
+      <p className="muted small">You must answer correctly to move on.</p>
+    </Panel>
   );
 }
 
 function BonusQuestions({ game, player }: { game: Game; player: Student }) {
   const s = game.state;
+  const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState<Record<number, number>>({});
+  const toggle = (
+    <button className="btn" aria-expanded={open} onClick={() => setOpen(!open)}>
+      {open ? 'Hide' : 'Show'}
+    </button>
+  );
   if (!s.settings.bonusEnabled) {
     return (
-      <Card title="Bonus Questions">
+      <Panel id="bonus" title="Bonus Questions" icon={<StarIcon />} accent="purple" className="area-bonus">
         <p>Bonus Questions are not available right now.</p>
-      </Card>
+      </Panel>
+    );
+  }
+  if (!open) {
+    return (
+      <Panel id="bonus" title="Bonus Questions" icon={<StarIcon />} accent="purple" className="area-bonus" actions={toggle}>
+        <p className="muted small">Optional extra questions for 20 coins each. One attempt per question.</p>
+      </Panel>
     );
   }
   const questions = bonusQuestionsForWeek(s.battle.weekIndex);
   return (
-    <Card title="Bonus Questions">
+    <Panel id="bonus" title="Bonus Questions" icon={<StarIcon />} accent="purple" className="area-bonus" actions={toggle}>
       <p className="muted small">One attempt each. Correct answers earn 20 coins. No hints, and answers lock when submitted.</p>
       {questions.map((q, i) => {
         const answered = player.bonusAnswers[bonusKey(s, i)];
@@ -235,7 +199,7 @@ function BonusQuestions({ game, player }: { game: Game; player: Student }) {
           </div>
         );
       })}
-    </Card>
+    </Panel>
   );
 }
 
@@ -256,40 +220,10 @@ function Upgrades({ game, player }: { game: Game; player: Student }) {
     setMessage(r.ok ? `${UPGRADE_DEFS[key].label} upgraded!` : r.reason);
   };
   return (
-    <Card title="Permanent Upgrades">
+    <Panel id="upgrades" title="Character Upgrades" icon={<SwordIcon />} accent="red" className="area-upgrades">
       <p className="muted small">Upgrades are permanent. They never reset when the week ends.</p>
-      <div className="grid">
-        {UPGRADE_KEYS.map((key) => {
-          const def = UPGRADE_DEFS[key];
-          const level = player.upgrades[key];
-          const maxed = isMaxed(player.upgrades, key);
-          const cost = upgradeCost(key, level);
-          const next = statText(key, { ...player.upgrades, [key]: level + 1 });
-          return (
-            <div className="upgrade" key={key}>
-              <h3>
-                {def.label} <span className="muted">Lv {level}</span>
-              </h3>
-              <p className="muted small">{def.blurb}</p>
-              <p>
-                {statText(key, player.upgrades)}
-                {!maxed && <> → <strong>{next}</strong></>}
-              </p>
-              {maxed ? (
-                <button disabled>Maxed</button>
-              ) : (
-                <button
-                  className="primary"
-                  disabled={player.coins < cost}
-                  onClick={() => (s.settings.requireMathForUpgrades ? setPending(key) : buy(key))}
-                >
-                  Buy for 🪙 {cost}
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <UpgradeGrid rows={upgradeRows(player.upgrades, statText)} coins={player.coins} onBuy={(key) => (s.settings.requireMathForUpgrades ? setPending(key) : buy(key))} />
+      <PlayerStats s={s} player={player} />
       {message && <p className="feedback info">{message}</p>}
       {pending && (
         <MathGate
@@ -302,14 +236,14 @@ function Upgrades({ game, player }: { game: Game; player: Student }) {
           }}
         />
       )}
-    </Card>
+    </Panel>
   );
 }
 
 function MathGate({ game, player, upgrade, onClose }: { game: Game; player: Student; upgrade: UpgradeKey; onClose: (message?: string) => void }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState('');
-  const cost = upgradeCost(upgrade, player.upgrades[upgrade]);
+  const cost = upgradeCostOf(upgrade, player);
   const confirm = () => {
     const claimed = Number(value);
     if (value.trim() === '' || !Number.isInteger(claimed)) return setError('Enter a whole number.');
@@ -337,58 +271,31 @@ function MathGate({ game, player, upgrade, onClose }: { game: Game; player: Stud
     </div>
   );
 }
+const upgradeCostOf = (key: UpgradeKey, p: Student): number => upgradeCost(key, p.upgrades[key]);
 
 function Projects({ game, player }: { game: Game; player: Student }) {
   const s = game.state;
   const [amounts, setAmounts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
+  const rows = PROJECT_KEYS.map((key) => ({ key, level: s.projects[key].level, funded: s.projects[key].funded, cost: currentProjectCost(s, key), maxed: isProjectMaxed(s, key) }));
   return (
-    <Card title="Classroom Projects">
+    <Panel id="projects" title="Castle Projects" icon={<HammerIcon />} accent="blue" className="area-projects">
       <p className="muted small">Donations are voluntary and shared by the whole class. Project upgrades reset every Monday.</p>
-      <div className="grid">
-        {PROJECT_KEYS.map((key) => {
-          const def = PROJECT_DEFS[key];
-          const cost = currentProjectCost(s, key);
-          const p = s.projects[key];
-          const maxed = isProjectMaxed(s, key);
-          const remaining = cost - p.funded;
-          const amount = amounts[key] ?? '10';
-          return (
-            <div className="upgrade" key={key}>
-              <h3>
-                {def.label} <span className="muted">×{p.level}</span>
-              </h3>
-              <p className="muted small">{def.blurb}</p>
-              {maxed ? (
-                <p>Maxed for this week</p>
-              ) : (
-                <>
-                  <Bar kind="project" value={p.funded} max={cost} label={`${p.funded} / ${cost} coins`} />
-                  <div className="row">
-                    <input
-                      aria-label={`Donation to ${def.label}`}
-                      inputMode="numeric"
-                      value={amount}
-                      onChange={(e) => setAmounts({ ...amounts, [key]: e.target.value })}
-                    />
-                    <button
-                      className="primary"
-                      onClick={() => {
-                        const r = game.act((state) => donate(state, player.id, key, Number(amount)));
-                        setMessage(r.ok ? `Donated ${r.charged} coins to ${def.label}${r.completed ? ' — project complete!' : '.'}` : r.reason);
-                      }}
-                    >
-                      Donate
-                    </button>
-                    <button onClick={() => setAmounts({ ...amounts, [key]: String(Math.min(player.coins, remaining)) })}>Max</button>
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
+      <ProjectGrid
+        rows={rows}
+        amounts={amounts}
+        coins={player.coins}
+        onAmount={(key, v) => setAmounts({ ...amounts, [key]: v })}
+        onDonate={(key) => {
+          const r = game.act((state) => donate(state, player.id, key, Number(amounts[key] ?? '10')));
+          setMessage(r.ok ? `Donated ${r.charged} coins to ${PROJECT_DEFS[key].label}${r.completed ? ' — project complete!' : '.'}` : r.reason);
+        }}
+        onMax={(key) => {
+          const r = rows.find((x) => x.key === key)!;
+          setAmounts({ ...amounts, [key]: String(Math.min(player.coins, r.cost - r.funded)) });
+        }}
+      />
       {message && <p className="feedback info">{message}</p>}
-    </Card>
+    </Panel>
   );
 }

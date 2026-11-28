@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Classroom, Cloud, CloudUser, MyClassroom, PlayerRecord } from '../../cloud/types';
+import type { Classroom, Cloud, CloudUser, MyClassroom } from '../../cloud/types';
 import { Card } from '../components';
 import MultiplayerStudent from './MultiplayerStudent';
 import { useAction } from './useAsync';
@@ -72,7 +72,6 @@ export default function StudentFlow({ cloud, user }: { cloud: Cloud; user: Cloud
 function ClassroomHome({ cloud, entry, onBack }: { cloud: Cloud; entry: MyClassroom; onBack: () => void }) {
   const { busy, error, run } = useAction();
   const [classroom, setClassroom] = useState<Classroom | null>(null);
-  const [player, setPlayer] = useState<PlayerRecord | null>(null);
   const [status, setStatus] = useState(entry.status);
 
   const load = useCallback(
@@ -82,7 +81,6 @@ function ClassroomHome({ cloud, entry, onBack }: { cloud: Cloud; entry: MyClassr
         setStatus(mine?.status ?? entry.status);
         if (mine?.status === 'active') {
           setClassroom(await cloud.student.getClassroom(entry.classroomId));
-          setPlayer(await cloud.student.getMyPlayer(entry.classroomId));
         }
       }),
     [cloud, entry, run],
@@ -108,13 +106,7 @@ function ClassroomHome({ cloud, entry, onBack }: { cloud: Cloud; entry: MyClassr
 
   return (
     <div className="stack">
-      <Card title={classroom.name}>
-        <div className="row wrap">
-          <button onClick={onBack}>← Back</button>
-          <span>Playing as <strong>{player?.nickname ?? '…'}</strong></span>
-        </div>
-      </Card>
-      <MultiplayerStudent cloud={cloud} classroom={classroom} />
+      <MultiplayerStudent cloud={cloud} classroom={classroom} onBack={onBack} />
     </div>
   );
 }

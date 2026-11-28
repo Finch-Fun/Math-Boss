@@ -2,6 +2,8 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './ui/App';
 import './styles.css';
+import './theme.css';
+import './battlefield/battlefield.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
